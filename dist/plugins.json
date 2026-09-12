@@ -1,0 +1,225 @@
+[
+  {
+    "packageName": "com.dogior.skystream.animeunity",
+    "name": "AnimeUnity",
+    "version": 1,
+    "baseUrl": "https://www.animeunity.so",
+    "description": "AnimeUnity - Anime in streaming sub ita e ita",
+    "authors": [
+      "doGior",
+      "SkyStream"
+    ],
+    "languages": [
+      "it"
+    ],
+    "categories": [
+      "Anime"
+    ],
+    "domains": [
+      {
+        "name": "www.animeunity.so",
+        "url": "https://www.animeunity.so"
+      },
+      {
+        "name": "animeunity.so",
+        "url": "https://animeunity.so"
+      },
+      {
+        "name": "animeunity.to",
+        "url": "https://animeunity.to"
+      }
+    ],
+    "url": "https://raw.githubusercontent.com/skystreamita/doGiorsHadEnough-SkyStream/main/dist/com.dogior.skystream.animeunity.sky"
+  },
+  {
+    "packageName": "com.dogior.skystream.animeworld",
+    "name": "AnimeWorld",
+    "version": 1,
+    "baseUrl": "https://www.animeworld.ac",
+    "description": "AnimeWorld - Anime in streaming sub ita e doppiati in italiano",
+    "authors": [
+      "doGior",
+      "SkyStream"
+    ],
+    "languages": [
+      "it"
+    ],
+    "categories": [
+      "Anime"
+    ],
+    "domains": [
+      {
+        "name": "www.animeworld.ac",
+        "url": "https://www.animeworld.ac"
+      },
+      {
+        "name": "animeworld.ac",
+        "url": "https://animeworld.ac"
+      },
+      {
+        "name": "animeworld.so",
+        "url": "https://animeworld.so"
+      }
+    ],
+    "url": "https://raw.githubusercontent.com/skystreamita/doGiorsHadEnough-SkyStream/main/dist/com.dogior.skystream.animeworld.sky"
+  },
+  {
+    "packageName": "com.dogior.skystream.arte",
+    "name": "Arte",
+    "version": 1,
+    "baseUrl": "https://www.arte.tv",
+    "description": "Arte - Documentari, film e serie in streaming gratuito",
+    "authors": [
+      "doGior",
+      "SkyStream"
+    ],
+    "languages": [
+      "it"
+    ],
+    "categories": [
+      "Documentary",
+      "Movies"
+    ],
+    "url": "https://raw.githubusercontent.com/skystreamita/doGiorsHadEnough-SkyStream/main/dist/com.dogior.skystream.arte.sky"
+  },
+  {
+    "packageName": "com.dogior.skystream.calciostreaming",
+    "name": "CalcioStreaming",
+    "version": 1,
+    "baseUrl": "https://finale.direttecommunity.online",
+    "description": "CalcioStreaming - Partite ed eventi sportivi in diretta streaming",
+    "authors": [
+      "doGior",
+      "SkyStream"
+    ],
+    "languages": [
+      "it"
+    ],
+    "categories": [
+      "Live Streams",
+      "Sports"
+    ],
+    "domains": [
+      {
+        "name": "finale.direttecommunity.online",
+        "url": "https://finale.direttecommunity.online"
+      },
+      {
+        "name": "angolo.direttecommunity.online",
+        "url": "https://angolo.direttecommunity.online"
+      }
+    ],
+    "url": "https://raw.githubusercontent.com/skystreamita/doGiorsHadEnough-SkyStream/main/dist/com.dogior.skystream.calciostreaming.sky"
+  },
+  {
+    "packageName": "com.dogior.skystream.streamingcommunity",
+    "name": "StreamingCommunity",
+    "version": 1,
+    "baseUrl": "https://streamingunity.win",
+    "description": "StreamingCommunity - Film, Serie TV, Cartoni e Documentari in streaming",
+    "authors": [
+      "doGior",
+      "SkyStream"
+    ],
+    "languages": [
+      "it"
+    ],
+    "categories": [
+      "Movies",
+      "TV Shows"
+    ],
+    "domains": [
+      {
+        "name": "streamingunity.win",
+        "url": "https://streamingunity.win"
+      },
+      {
+        "name": "streamingcommunityz.systems",
+        "url": "https://streamingcommunityz.systems"
+      },
+      {
+        "name": "streamingcommunity.buzz",
+        "url": "https://streamingcommunity.buzz"
+      }
+    ],
+    "url": "https://raw.githubusercontent.com/skystreamita/doGiorsHadEnough-SkyStream/main/dist/com.dogior.skystream.streamingcommunity.sky"
+  },
+  {
+    "packageName": "com.dogior.skystream.tv",
+    "name": "TV",
+    "version": 1,
+    "baseUrl": "https://raw.githubusercontent.com/Free-TV/IPTV/refs/heads/master/playlists/playlist_italy.m3u8",
+    "description": "TV - Canali televisivi italiani e internazionali in diretta streaming",
+    "authors": [
+      "doGior",
+      "SkyStream"
+    ],
+    "languages": [
+      "it"
+    ],
+    "categories": [
+      "Live Streams",
+      "IPTV"
+    ],
+    "providers": [
+      {
+        "id": "italy",
+        "name": "Italia (Tutti i canali)",
+        "baseUrl": "https://raw.githubusercontent.com/Free-TV/IPTV/refs/heads/master/playlists/playlist_italy.m3u8"
+      },
+      {
+        "id": "news",
+        "name": "News / Notizie",
+        "baseUrl": "https://raw.githubusercontent.com/Free-TV/IPTV/refs/heads/master/playlists/playlist_news.m3u8"
+      },
+      {
+        "id": "sport",
+        "name": "Sport",
+        "baseUrl": "https://raw.githubusercontent.com/Free-TV/IPTV/refs/heads/master/playlists/playlist_sport.m3u8"
+      },
+      {
+        "id": "movies",
+        "name": "Film & Cinema",
+        "baseUrl": "https://raw.githubusercontent.com/Free-TV/IPTV/refs/heads/master/playlists/playlist_movies.m3u8"
+      },
+      {
+        "id": "kids",
+        "name": "Bambini & Ragazzi",
+        "baseUrl": "https://raw.githubusercontent.com/Free-TV/IPTV/refs/heads/master/playlists/playlist_kids.m3u8"
+      },
+      {
+        "id": "music",
+        "name": "Musica",
+        "baseUrl": "https://raw.githubusercontent.com/Free-TV/IPTV/refs/heads/master/playlists/playlist_music.m3u8"
+      }
+    ],
+    "url": "https://raw.githubusercontent.com/skystreamita/doGiorsHadEnough-SkyStream/main/dist/com.dogior.skystream.tv.sky"
+  },
+  {
+    "packageName": "com.dogior.skystream.vavoo",
+    "name": "Vavoo",
+    "version": 1,
+    "baseUrl": "https://vavoo.to",
+    "description": "Vavoo - Canali TV in diretta streaming internazionali e italiani",
+    "authors": [
+      "doGior",
+      "SkyStream"
+    ],
+    "languages": [
+      "it",
+      "en",
+      "de"
+    ],
+    "categories": [
+      "Live Streams",
+      "IPTV"
+    ],
+    "domains": [
+      {
+        "name": "vavoo.to",
+        "url": "https://vavoo.to"
+      }
+    ],
+    "url": "https://raw.githubusercontent.com/skystreamita/doGiorsHadEnough-SkyStream/main/dist/com.dogior.skystream.vavoo.sky"
+  }
+]

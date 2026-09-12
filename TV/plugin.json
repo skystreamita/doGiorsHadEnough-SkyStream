@@ -1,0 +1,42 @@
+{
+  "packageName": "com.dogior.skystream.tv",
+  "name": "TV",
+  "version": 1,
+  "baseUrl": "https://raw.githubusercontent.com/Free-TV/IPTV/refs/heads/master/playlists/playlist_italy.m3u8",
+  "description": "TV - Canali televisivi italiani e internazionali in diretta streaming",
+  "authors": ["doGior", "SkyStream"],
+  "languages": ["it"],
+  "categories": ["Live Streams", "IPTV"],
+  "providers": [
+    {
+      "id": "italy",
+      "name": "Italia (Tutti i canali)",
+      "baseUrl": "https://raw.githubusercontent.com/Free-TV/IPTV/refs/heads/master/playlists/playlist_italy.m3u8"
+    },
+    {
+      "id": "news",
+      "name": "News / Notizie",
+      "baseUrl": "https://raw.githubusercontent.com/Free-TV/IPTV/refs/heads/master/playlists/playlist_news.m3u8"
+    },
+    {
+      "id": "sport",
+      "name": "Sport",
+      "baseUrl": "https://raw.githubusercontent.com/Free-TV/IPTV/refs/heads/master/playlists/playlist_sport.m3u8"
+    },
+    {
+      "id": "movies",
+      "name": "Film & Cinema",
+      "baseUrl": "https://raw.githubusercontent.com/Free-TV/IPTV/refs/heads/master/playlists/playlist_movies.m3u8"
+    },
+    {
+      "id": "kids",
+      "name": "Bambini & Ragazzi",
+      "baseUrl": "https://raw.githubusercontent.com/Free-TV/IPTV/refs/heads/master/playlists/playlist_kids.m3u8"
+    },
+    {
+      "id": "music",
+      "name": "Musica",
+      "baseUrl": "https://raw.githubusercontent.com/Free-TV/IPTV/refs/heads/master/playlists/playlist_music.m3u8"
+    }
+  ]
+}

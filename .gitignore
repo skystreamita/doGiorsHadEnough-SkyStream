@@ -1,0 +1,8 @@
+node_modules/
+.build/
+*.log
+doGiorsHadEnough_source/
+ref_skystream_tools/
+ref_skystream_plugins/
+ref_miraiext/
+.system_generated/

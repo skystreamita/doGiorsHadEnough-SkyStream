@@ -1,0 +1,15 @@
+{
+  "packageName": "com.dogior.skystream.streamingcommunity",
+  "name": "StreamingCommunity",
+  "version": 1,
+  "baseUrl": "https://streamingunity.win",
+  "description": "StreamingCommunity - Film, Serie TV, Cartoni e Documentari in streaming",
+  "authors": ["doGior", "SkyStream"],
+  "languages": ["it"],
+  "categories": ["Movies", "TV Shows"],
+  "domains": [
+    { "name": "streamingunity.win", "url": "https://streamingunity.win" },
+    { "name": "streamingcommunityz.systems", "url": "https://streamingcommunityz.systems" },
+    { "name": "streamingcommunity.buzz", "url": "https://streamingcommunity.buzz" }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "packageName": "com.dogior.skystream.animeunity",
+  "name": "AnimeUnity",
+  "version": 1,
+  "baseUrl": "https://www.animeunity.so",
+  "description": "AnimeUnity - Anime in streaming sub ita e ita",
+  "authors": ["doGior", "SkyStream"],
+  "languages": ["it"],
+  "categories": ["Anime"],
+  "domains": [
+    { "name": "www.animeunity.so", "url": "https://www.animeunity.so" },
+    { "name": "animeunity.so", "url": "https://animeunity.so" },
+    { "name": "animeunity.to", "url": "https://animeunity.to" }
+  ]
+}

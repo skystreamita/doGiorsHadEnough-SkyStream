@@ -1,0 +1,14 @@
+{
+  "packageName": "com.dogior.skystream.calciostreaming",
+  "name": "CalcioStreaming",
+  "version": 1,
+  "baseUrl": "https://finale.direttecommunity.online",
+  "description": "CalcioStreaming - Partite ed eventi sportivi in diretta streaming",
+  "authors": ["doGior", "SkyStream"],
+  "languages": ["it"],
+  "categories": ["Live Streams", "Sports"],
+  "domains": [
+    { "name": "finale.direttecommunity.online", "url": "https://finale.direttecommunity.online" },
+    { "name": "angolo.direttecommunity.online", "url": "https://angolo.direttecommunity.online" }
+  ]
+}

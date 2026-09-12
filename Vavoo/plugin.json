@@ -1,0 +1,13 @@
+{
+  "packageName": "com.dogior.skystream.vavoo",
+  "name": "Vavoo",
+  "version": 1,
+  "baseUrl": "https://vavoo.to",
+  "description": "Vavoo - Canali TV in diretta streaming internazionali e italiani",
+  "authors": ["doGior", "SkyStream"],
+  "languages": ["it", "en", "de"],
+  "categories": ["Live Streams", "IPTV"],
+  "domains": [
+    { "name": "vavoo.to", "url": "https://vavoo.to" }
+  ]
+}

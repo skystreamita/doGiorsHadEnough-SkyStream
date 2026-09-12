@@ -1,0 +1,10 @@
+{
+  "packageName": "com.dogior.skystream.arte",
+  "name": "Arte",
+  "version": 1,
+  "baseUrl": "https://www.arte.tv",
+  "description": "Arte - Documentari, film e serie in streaming gratuito",
+  "authors": ["doGior", "SkyStream"],
+  "languages": ["it"],
+  "categories": ["Documentary", "Movies"]
+}

@@ -1,0 +1,9 @@
+{
+  "name": "doGiorsHadEnough-SkyStream",
+  "packageName": "com.dogior.skystream",
+  "description": "SkyStream Italian Extensions Repository (Port of doGiorsHadEnough)",
+  "manifestVersion": 1,
+  "pluginLists": [
+    "https://raw.githubusercontent.com/skystreamita/doGiorsHadEnough-SkyStream/main/dist/plugins.json"
+  ]
+}
