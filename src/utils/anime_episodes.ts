@@ -18,15 +18,22 @@ export async function fetchAnimeEpisodeMetadata(opts: {
     if (!num || num < 1) return;
     const existing = epMap.get(num) || {};
     epMap.set(num, {
-      title: meta.title || existing.title,
-      description: meta.description || existing.description,
-      thumbnail: meta.thumbnail || existing.thumbnail
+      title: existing.title || meta.title,
+      description: existing.description || meta.description,
+      thumbnail: existing.thumbnail || meta.thumbnail
     });
   };
 
+  const cleanTitle = (opts.title || '')
+    .replace(/\s*\(ITA\)\s*/gi, '')
+    .replace(/\s*\(SUB ITA\)\s*/gi, '')
+    .replace(/\s*\[ITA\]\s*/gi, '')
+    .replace(/\s*\[SUB ITA\]\s*/gi, '')
+    .trim();
+
   const tasks: Promise<void>[] = [];
 
-  // 1. Kitsu via MAL ID or Title (Provides canonical titles, descriptions, and high-res thumbnails)
+  // 1. Kitsu via MAL ID or Title (Canonical titles, descriptions, and high-res thumbnails)
   tasks.push((async () => {
     try {
       let kitsuId: string | null = null;
@@ -39,8 +46,7 @@ export async function fetchAnimeEpisodeMetadata(opts: {
         }
       }
 
-      if (!kitsuId && opts.title) {
-        const cleanTitle = opts.title.replace(/\s*\(ITA\)\s*/gi, '').replace(/\s*\(SUB ITA\)\s*/gi, '').trim();
+      if (!kitsuId && cleanTitle) {
         const searchUrl = `https://kitsu.io/api/edge/anime?filter[text]=${encodeURIComponent(cleanTitle)}&page[limit]=1`;
         const searchRes = await get(searchUrl).catch(() => null);
         if (searchRes && searchRes.body) {
@@ -53,7 +59,6 @@ export async function fetchAnimeEpisodeMetadata(opts: {
 
       const totalCount = opts.episodeCount || 26;
       const pageOffsets: number[] = [];
-      // Kitsu max page size is 20, fetch up to 100 episodes concurrently
       for (let offset = 0; offset < totalCount && offset < 100; offset += 20) {
         pageOffsets.push(offset);
       }
@@ -73,11 +78,13 @@ export async function fetchAnimeEpisodeMetadata(opts: {
                                 item?.attributes?.titles?.en_jp;
                 const epDesc = item?.attributes?.synopsis;
                 const epThumb = item?.attributes?.thumbnail?.original;
-                setMeta(num, {
-                  title: epTitle || undefined,
-                  description: epDesc || undefined,
-                  thumbnail: epThumb || undefined
-                });
+                if (epTitle || epDesc || epThumb) {
+                  setMeta(num, {
+                    title: epTitle || undefined,
+                    description: epDesc || undefined,
+                    thumbnail: epThumb || undefined
+                  });
+                }
               }
             }
           }
@@ -90,7 +97,68 @@ export async function fetchAnimeEpisodeMetadata(opts: {
     }
   })());
 
-  // 2. AniList streamingEpisodes (Provides Crunchyroll thumbnails and episode titles)
+  // 2. Cinemeta (Stremio metadata - covers TVDB / TMDB / IMDb with all episodes, titles, descriptions & stills)
+  if (cleanTitle) {
+    tasks.push((async () => {
+      try {
+        const sUrl = `https://v3-cinemeta.strem.io/catalog/series/top/search=${encodeURIComponent(cleanTitle)}.json`;
+        const sRes = await get(sUrl).catch(() => null);
+        if (sRes && sRes.body) {
+          const sData = parseJsonSafe(sRes.body);
+          const first = sData?.metas?.[0];
+          if (first?.id) {
+            const mUrl = `https://v3-cinemeta.strem.io/meta/series/${first.id}.json`;
+            const mRes = await get(mUrl).catch(() => null);
+            if (mRes && mRes.body) {
+              const mData = parseJsonSafe(mRes.body);
+              const videos = mData?.meta?.videos || [];
+              for (const v of videos) {
+                const num = v.number || v.episode;
+                if (typeof num === 'number') {
+                  setMeta(num, {
+                    title: v.name || v.title,
+                    description: v.overview || v.description,
+                    thumbnail: v.thumbnail
+                  });
+                }
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Cinemeta episode fetch error:', err);
+      }
+    })());
+  }
+
+  // 3. TVMaze (TV shows & anime: comprehensive episodes with high-res stills and summaries)
+  if (cleanTitle) {
+    tasks.push((async () => {
+      try {
+        const tvmUrl = `https://api.tvmaze.com/singlesearch/shows?q=${encodeURIComponent(cleanTitle)}&embed=episodes`;
+        const tvmRes = await get(tvmUrl).catch(() => null);
+        if (tvmRes && tvmRes.body) {
+          const tvmData = parseJsonSafe(tvmRes.body);
+          const eps = tvmData?._embedded?.episodes || [];
+          for (const ep of eps) {
+            const num = ep.number;
+            if (typeof num === 'number') {
+              const cleanDesc = ep.summary ? ep.summary.replace(/<[^>]+>/g, '').trim() : undefined;
+              setMeta(num, {
+                title: ep.name,
+                description: cleanDesc,
+                thumbnail: ep.image?.original || ep.image?.medium
+              });
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('TVMaze episode fetch error:', err);
+      }
+    })());
+  }
+
+  // 4. AniList streamingEpisodes (Provides Crunchyroll thumbnails and episode titles)
   if (opts.anilistId) {
     tasks.push((async () => {
       try {
@@ -114,7 +182,6 @@ export async function fetchAnimeEpisodeMetadata(opts: {
           const streaming = data?.data?.Media?.streamingEpisodes || [];
           for (const ep of streaming) {
             if (!ep?.title) continue;
-            // Match "Episode 1 - Title" or "1. Title" or "Episode 1: Title"
             const match = ep.title.match(/^(?:Episode\s+(\d+)|\s*(\d+)\s*[.:\-])\s*(?:[-:]\s*)?(.*)$/i);
             if (match) {
               const num = parseInt(match[1] || match[2], 10);

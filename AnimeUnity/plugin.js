@@ -376,11 +376,12 @@ var PluginModule = (() => {
       if (!num || num < 1) return;
       const existing = epMap.get(num) || {};
       epMap.set(num, {
-        title: meta.title || existing.title,
-        description: meta.description || existing.description,
-        thumbnail: meta.thumbnail || existing.thumbnail
+        title: existing.title || meta.title,
+        description: existing.description || meta.description,
+        thumbnail: existing.thumbnail || meta.thumbnail
       });
     };
+    const cleanTitle = (opts.title || "").replace(/\s*\(ITA\)\s*/gi, "").replace(/\s*\(SUB ITA\)\s*/gi, "").replace(/\s*\[ITA\]\s*/gi, "").replace(/\s*\[SUB ITA\]\s*/gi, "").trim();
     const tasks = [];
     tasks.push((async () => {
       try {
@@ -393,8 +394,7 @@ var PluginModule = (() => {
             kitsuId = mapData?.data?.[0]?.relationships?.item?.data?.id || null;
           }
         }
-        if (!kitsuId && opts.title) {
-          const cleanTitle = opts.title.replace(/\s*\(ITA\)\s*/gi, "").replace(/\s*\(SUB ITA\)\s*/gi, "").trim();
+        if (!kitsuId && cleanTitle) {
           const searchUrl = `https://kitsu.io/api/edge/anime?filter[text]=${encodeURIComponent(cleanTitle)}&page[limit]=1`;
           const searchRes = await get(searchUrl).catch(() => null);
           if (searchRes && searchRes.body) {
@@ -421,11 +421,13 @@ var PluginModule = (() => {
                   const epTitle = item?.attributes?.canonicalTitle || item?.attributes?.titles?.en_us || item?.attributes?.titles?.en_jp;
                   const epDesc = item?.attributes?.synopsis;
                   const epThumb = item?.attributes?.thumbnail?.original;
-                  setMeta(num, {
-                    title: epTitle || void 0,
-                    description: epDesc || void 0,
-                    thumbnail: epThumb || void 0
-                  });
+                  if (epTitle || epDesc || epThumb) {
+                    setMeta(num, {
+                      title: epTitle || void 0,
+                      description: epDesc || void 0,
+                      thumbnail: epThumb || void 0
+                    });
+                  }
                 }
               }
             }
@@ -437,6 +439,63 @@ var PluginModule = (() => {
         console.warn("Kitsu episode fetch error:", err);
       }
     })());
+    if (cleanTitle) {
+      tasks.push((async () => {
+        try {
+          const sUrl = `https://v3-cinemeta.strem.io/catalog/series/top/search=${encodeURIComponent(cleanTitle)}.json`;
+          const sRes = await get(sUrl).catch(() => null);
+          if (sRes && sRes.body) {
+            const sData = parseJsonSafe(sRes.body);
+            const first = sData?.metas?.[0];
+            if (first?.id) {
+              const mUrl = `https://v3-cinemeta.strem.io/meta/series/${first.id}.json`;
+              const mRes = await get(mUrl).catch(() => null);
+              if (mRes && mRes.body) {
+                const mData = parseJsonSafe(mRes.body);
+                const videos = mData?.meta?.videos || [];
+                for (const v of videos) {
+                  const num = v.number || v.episode;
+                  if (typeof num === "number") {
+                    setMeta(num, {
+                      title: v.name || v.title,
+                      description: v.overview || v.description,
+                      thumbnail: v.thumbnail
+                    });
+                  }
+                }
+              }
+            }
+          }
+        } catch (err) {
+          console.warn("Cinemeta episode fetch error:", err);
+        }
+      })());
+    }
+    if (cleanTitle) {
+      tasks.push((async () => {
+        try {
+          const tvmUrl = `https://api.tvmaze.com/singlesearch/shows?q=${encodeURIComponent(cleanTitle)}&embed=episodes`;
+          const tvmRes = await get(tvmUrl).catch(() => null);
+          if (tvmRes && tvmRes.body) {
+            const tvmData = parseJsonSafe(tvmRes.body);
+            const eps = tvmData?._embedded?.episodes || [];
+            for (const ep of eps) {
+              const num = ep.number;
+              if (typeof num === "number") {
+                const cleanDesc = ep.summary ? ep.summary.replace(/<[^>]+>/g, "").trim() : void 0;
+                setMeta(num, {
+                  title: ep.name,
+                  description: cleanDesc,
+                  thumbnail: ep.image?.original || ep.image?.medium
+                });
+              }
+            }
+          }
+        } catch (err) {
+          console.warn("TVMaze episode fetch error:", err);
+        }
+      })());
+    }
     if (opts.anilistId) {
       tasks.push((async () => {
         try {
