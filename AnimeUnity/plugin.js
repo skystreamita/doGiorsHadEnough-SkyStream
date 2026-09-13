@@ -403,20 +403,25 @@ var PluginModule = (() => {
       };
     }
   }
+  function decodeHtml(str) {
+    return str.replace(/&#039;/g, "'").replace(/&#x27;/g, "'").replace(/&#39;/g, "'").replace(/&apos;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
+  }
   function parseAnimeToMultimediaItem(record) {
-    const displayTitle = record.title_it || record.title_eng || record.title || record.slug || "Anime";
-    const cleanTitle = displayTitle.replace(/\s*\(ITA\)\s*$/i, "");
-    const isDub = record.dub === 1 || record.slug && record.slug.includes("-ita");
+    const isDub = record.dub === 1 || typeof record.slug === "string" && record.slug.toLowerCase().includes("-ita") || typeof record.title === "string" && record.title.toLowerCase().includes("(ita)");
+    const rawTitle = decodeHtml(record.title_it || record.title_eng || record.title || record.slug || "Anime");
+    const cleanTitle = rawTitle.replace(/\s*\(ITA\)\s*$/i, "").replace(/\s*\(SUB ITA\)\s*$/i, "").replace(/\s*\(SUB\)\s*$/i, "").trim();
+    const displayTitle = isDub ? `${cleanTitle} (ITA)` : `${cleanTitle} (SUB)`;
     const score = record.score ? parseFloat(record.score) : void 0;
     const itemUrl = `${manifest.baseUrl}/anime/${record.id}-${record.slug}`;
     return new MultimediaItem({
-      title: cleanTitle,
+      title: displayTitle,
       url: itemUrl,
       posterUrl: record.imageurl || "",
       bannerUrl: record.imageurl_cover || record.imageurl || "",
       type: "anime",
       status: record.status === "In corso" ? "ongoing" : "completed",
       score,
+      tags: [isDub ? "DOPPIATO ITA" : "SUB ITA"],
       description: (isDub ? "[DOPPIATO ITA] " : "[SUB ITA] ") + (record.plot || "")
     });
   }
@@ -565,8 +570,12 @@ var PluginModule = (() => {
         }
       }
       const titleMatch = html.match(/<h1[^>]*class="[^"]*title[^"]*"[^>]*>([\s\S]*?)<\/h1>/i);
-      const displayTitle = animeData?.title_it || animeData?.title_eng || animeData?.title || (titleMatch ? titleMatch[1].replace(/<[^>]+>/g, "").trim() : "Anime");
-      const cleanTitle = displayTitle.replace(/\s*\(ITA\)\s*$/i, "");
+      const rawDisplayTitle = decodeHtml(animeData?.title_it || animeData?.title_eng || animeData?.title || (titleMatch ? titleMatch[1].replace(/<[^>]+>/g, "").trim() : "Anime"));
+      const isDub = Boolean(
+        animeData?.dub === 1 || typeof animeData?.slug === "string" && animeData.slug.toLowerCase().endsWith("-ita") || targetUrl.toLowerCase().includes("-ita") || typeof rawDisplayTitle === "string" && rawDisplayTitle.toLowerCase().includes("(ita)")
+      );
+      const cleanTitle = rawDisplayTitle.replace(/\s*\(ITA\)\s*$/i, "").replace(/\s*\(SUB ITA\)\s*$/i, "").replace(/\s*\(SUB\)\s*$/i, "").trim();
+      const finalDisplayTitle = isDub ? `${cleanTitle} (ITA)` : `${cleanTitle} (SUB)`;
       const posterMatch = html.match(/class="[^"]*poster[^"]*"[^>]*img[^>]+src="([^"]+)"/i) || html.match(/<img[^>]+class="[^"]*poster[^"]*"[^>]+src="([^"]+)"/i);
       const posterUrl = animeData?.imageurl || (posterMatch ? posterMatch[1] : "");
       const descMatch = html.match(/class="[^"]*plot[^"]*"[^>]*>([\s\S]*?)<\/p>/i);
@@ -584,13 +593,14 @@ var PluginModule = (() => {
         }
       }
       const item = new MultimediaItem({
-        title: cleanTitle,
+        title: finalDisplayTitle,
         url: targetUrl,
         posterUrl,
         type: "anime",
-        description,
+        description: (isDub ? "[DOPPIATO ITA] " : "[SUB ITA] ") + description,
         score,
         status: animeData?.status === "In corso" ? "ongoing" : "completed",
+        tags: [isDub ? "DOPPIATO ITA" : "SUB ITA"],
         syncData: Object.keys(syncData).length > 0 ? syncData : void 0
       });
       const episodes = [];
@@ -602,15 +612,17 @@ var PluginModule = (() => {
             name: `Episodio ${ep.number}`,
             url: epUrl,
             season: 1,
-            episode: Math.floor(epNum)
+            episode: Math.floor(epNum),
+            dubStatus: isDub ? "dubbed" : "subbed"
           }));
         }
       } else {
         episodes.push(new Episode({
-          name: cleanTitle,
+          name: finalDisplayTitle,
           url: targetUrl,
           season: 1,
-          episode: 1
+          episode: 1,
+          dubStatus: isDub ? "dubbed" : "subbed"
         }));
       }
       item.episodes = episodes;

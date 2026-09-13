@@ -209,14 +209,16 @@ var PluginModule = (() => {
       if (posterUrl.startsWith("//")) posterUrl = "https:" + posterUrl;
       const fullUrl = relUrl.startsWith("http") ? relUrl : `${manifest.baseUrl}${relUrl.startsWith("/") ? "" : "/"}${relUrl}`;
       const rawTitle = decodeHtml(nameMatch[1].replace(/<[^>]+>/g, "").trim());
-      const cleanTitle = rawTitle.replace(/\s*\(ITA\)\s*$/i, "");
-      const isDub = block.includes('class="dub"') || rawTitle.includes("(ITA)");
+      const isDub = block.includes('class="dub"') || rawTitle.includes("(ITA)") || fullUrl.includes("-ita.");
+      const cleanTitle = rawTitle.replace(/\s*\(ITA\)\s*$/i, "").replace(/\s*\(SUB ITA\)\s*$/i, "").replace(/\s*\(SUB\)\s*$/i, "").trim();
+      const displayTitle = isDub ? `${cleanTitle} (ITA)` : `${cleanTitle} (SUB)`;
       items.push(new MultimediaItem({
-        title: cleanTitle,
+        title: displayTitle,
         url: fullUrl,
         posterUrl,
         type: "anime",
         status: "ongoing",
+        tags: [isDub ? "DOPPIATO ITA" : "SUB ITA"],
         description: isDub ? "[DOPPIATO ITA]" : "[SUB ITA]"
       }));
     }
@@ -286,7 +288,10 @@ var PluginModule = (() => {
       const res = await get(targetUrl);
       const html = res.body;
       const titleMatch = html.match(/<h1[^>]*class="[^"]*title[^"]*"[^>]*>([\s\S]*?)<\/h1>/i) || html.match(/<div class="info">[\s\S]*?<div class="title"[^>]*>([\s\S]*?)<\/div>/i);
-      const cleanTitle = titleMatch ? decodeHtml(titleMatch[1].replace(/<[^>]+>/g, "")).replace(/\s*\(ITA\)\s*$/i, "").trim() : "Anime";
+      const rawTitleStr = titleMatch ? decodeHtml(titleMatch[1].replace(/<[^>]+>/g, "")).trim() : "Anime";
+      const isDub = targetUrl.includes("-ita.") || html.includes('class="dub"') || rawTitleStr.includes("(ITA)");
+      const cleanTitle = rawTitleStr.replace(/\s*\(ITA\)\s*$/i, "").replace(/\s*\(SUB ITA\)\s*$/i, "").replace(/\s*\(SUB\)\s*$/i, "").trim();
+      const displayTitle = isDub ? `${cleanTitle} (ITA)` : `${cleanTitle} (SUB)`;
       const posterMatch = html.match(/class="thumb">[\s\S]*?<img[^>]+(?:src|data-src)="([^"]+)"/i) || html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) || html.match(/<img[^>]+src=["'](https?:\/\/img\.animeworld\.[^"']+)["']/i);
       let posterUrl = posterMatch ? posterMatch[1] : "";
       if (posterUrl.startsWith("//")) posterUrl = "https:" + posterUrl;
@@ -300,6 +305,7 @@ var PluginModule = (() => {
       const score = scoreMatch ? parseFloat(scoreMatch[1].trim()) : void 0;
       const genreMatches = [...html.matchAll(/href="[^"]*\/genre\/[^"]*"[^>]*>([\s\S]*?)<\/a>/gi)];
       const tags = genreMatches.map((m) => m[1].replace(/<[^>]+>/g, "").trim());
+      tags.unshift(isDub ? "DOPPIATO ITA" : "SUB ITA");
       const episodes = [];
       const epMatches = [...html.matchAll(/<li[^>]*class="[^"]*episode[^"]*"[^>]*><a[^>]+data-id="([^"]+)"[^>]+data-episode-num="([^"]+)"[^>]*>/gi)];
       for (const ep of epMatches) {
@@ -310,7 +316,8 @@ var PluginModule = (() => {
           name: `Episodio ${epNum}`,
           url: streamApiUrl,
           season: 1,
-          episode: epNum
+          episode: epNum,
+          dubStatus: isDub ? "dubbed" : "subbed"
         }));
       }
       episodes.sort((a, b) => (a.episode || 0) - (b.episode || 0));
@@ -340,11 +347,11 @@ var PluginModule = (() => {
         }
       }
       const item = new MultimediaItem({
-        title: cleanTitle,
+        title: displayTitle,
         url: targetUrl,
         posterUrl,
         type: "anime",
-        description,
+        description: (isDub ? "[DOPPIATO ITA] " : "[SUB ITA] ") + description,
         score,
         tags,
         episodes,

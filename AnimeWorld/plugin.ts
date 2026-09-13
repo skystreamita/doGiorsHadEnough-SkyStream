@@ -32,16 +32,17 @@ function parseHtmlItems(html: string): MultimediaItem[] {
 
     const fullUrl = relUrl.startsWith('http') ? relUrl : `${manifest.baseUrl}${relUrl.startsWith('/') ? '' : '/'}${relUrl}`;
     const rawTitle = decodeHtml(nameMatch[1].replace(/<[^>]+>/g, '').trim());
-    const cleanTitle = rawTitle.replace(/\s*\(ITA\)\s*$/i, '');
-
-    const isDub = block.includes('class="dub"') || rawTitle.includes('(ITA)');
+    const isDub = block.includes('class="dub"') || rawTitle.includes('(ITA)') || fullUrl.includes('-ita.');
+    const cleanTitle = rawTitle.replace(/\s*\(ITA\)\s*$/i, '').replace(/\s*\(SUB ITA\)\s*$/i, '').replace(/\s*\(SUB\)\s*$/i, '').trim();
+    const displayTitle = isDub ? `${cleanTitle} (ITA)` : `${cleanTitle} (SUB)`;
 
     items.push(new MultimediaItem({
-      title: cleanTitle,
+      title: displayTitle,
       url: fullUrl,
       posterUrl,
       type: 'anime',
       status: 'ongoing',
+      tags: [isDub ? 'DOPPIATO ITA' : 'SUB ITA'],
       description: isDub ? '[DOPPIATO ITA]' : '[SUB ITA]'
     }));
   }
@@ -128,7 +129,10 @@ export async function load(url: string, cb: (res: Result<MultimediaItem>) => voi
 
     const titleMatch = html.match(/<h1[^>]*class="[^"]*title[^"]*"[^>]*>([\s\S]*?)<\/h1>/i) ||
                        html.match(/<div class="info">[\s\S]*?<div class="title"[^>]*>([\s\S]*?)<\/div>/i);
-    const cleanTitle = titleMatch ? decodeHtml(titleMatch[1].replace(/<[^>]+>/g, '')).replace(/\s*\(ITA\)\s*$/i, '').trim() : 'Anime';
+    const rawTitleStr = titleMatch ? decodeHtml(titleMatch[1].replace(/<[^>]+>/g, '')).trim() : 'Anime';
+    const isDub = targetUrl.includes('-ita.') || html.includes('class="dub"') || rawTitleStr.includes('(ITA)');
+    const cleanTitle = rawTitleStr.replace(/\s*\(ITA\)\s*$/i, '').replace(/\s*\(SUB ITA\)\s*$/i, '').replace(/\s*\(SUB\)\s*$/i, '').trim();
+    const displayTitle = isDub ? `${cleanTitle} (ITA)` : `${cleanTitle} (SUB)`;
 
     const posterMatch = html.match(/class="thumb">[\s\S]*?<img[^>]+(?:src|data-src)="([^"]+)"/i) ||
                         html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ||
@@ -149,6 +153,7 @@ export async function load(url: string, cb: (res: Result<MultimediaItem>) => voi
     // Genres
     const genreMatches = [...html.matchAll(/href="[^"]*\/genre\/[^"]*"[^>]*>([\s\S]*?)<\/a>/gi)];
     const tags = genreMatches.map(m => m[1].replace(/<[^>]+>/g, '').trim());
+    tags.unshift(isDub ? 'DOPPIATO ITA' : 'SUB ITA');
 
     // Episodes
     const episodes: Episode[] = [];
@@ -163,7 +168,8 @@ export async function load(url: string, cb: (res: Result<MultimediaItem>) => voi
         name: `Episodio ${epNum}`,
         url: streamApiUrl,
         season: 1,
-        episode: epNum
+        episode: epNum,
+        dubStatus: isDub ? 'dubbed' : 'subbed'
       }));
     }
 
@@ -201,11 +207,11 @@ export async function load(url: string, cb: (res: Result<MultimediaItem>) => voi
     }
 
     const item = new MultimediaItem({
-      title: cleanTitle,
+      title: displayTitle,
       url: targetUrl,
       posterUrl,
       type: 'anime',
-      description,
+      description: (isDub ? '[DOPPIATO ITA] ' : '[SUB ITA] ') + description,
       score,
       tags,
       episodes,
