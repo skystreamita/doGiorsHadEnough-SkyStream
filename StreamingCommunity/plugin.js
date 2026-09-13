@@ -116,6 +116,92 @@ var PluginModule = (() => {
       if (canPlayFHD) {
         finalUrl += "&h=1";
       }
+      let subtitles = [];
+      try {
+        const masterRes = await get(finalUrl, {
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "Referer": cleanEmbedUrl
+          }
+        });
+        if (masterRes && masterRes.body) {
+          const lines = masterRes.body.split("\n");
+          const subLines = lines.filter((l) => l.includes("TYPE=SUBTITLES"));
+          if (subLines.length > 0) {
+            const parsedSubs = [];
+            for (const line of subLines) {
+              const nameMatch = line.match(/NAME="([^"]+)"/);
+              const langMatch = line.match(/LANGUAGE="([^"]+)"/);
+              const uriMatch = line.match(/URI="([^"]+)"/);
+              if (!nameMatch || !uriMatch) continue;
+              const name = nameMatch[1];
+              const lang = langMatch ? langMatch[1] : "und";
+              const uri = uriMatch[1];
+              const isForced = /forced/i.test(name) || /forzat/i.test(name) || /FORCED=YES/i.test(line);
+              const isItalian = /ita/i.test(name) || /ita/i.test(lang);
+              parsedSubs.push({
+                name,
+                lang,
+                uri,
+                isForced,
+                isItalian
+              });
+            }
+            parsedSubs.sort((a, b) => {
+              const aItaForced = a.isItalian && a.isForced;
+              const bItaForced = b.isItalian && b.isForced;
+              if (aItaForced && !bItaForced) return -1;
+              if (!aItaForced && bItaForced) return 1;
+              if (a.isForced && !b.isForced) return -1;
+              if (!a.isForced && b.isForced) return 1;
+              if (a.isItalian && !b.isItalian) return -1;
+              if (!a.isItalian && b.isItalian) return 1;
+              return a.name.localeCompare(b.name);
+            });
+            const hasForced = parsedSubs.some((s) => s.isForced);
+            parsedSubs.forEach((s, idx) => {
+              if (hasForced) {
+                s.default = s.isForced && idx === 0;
+              } else {
+                s.default = idx === 0 && s.isItalian;
+              }
+            });
+            for (let i = 0; i < Math.min(parsedSubs.length, 5); i++) {
+              const s = parsedSubs[i];
+              try {
+                const subRes = await get(s.uri, {
+                  headers: {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                    "Referer": cleanEmbedUrl
+                  }
+                });
+                if (subRes && subRes.body) {
+                  const vttMatch = subRes.body.match(/https?:\/\/[^\s"'<>\r\n]+\.vtt[^\s"'<>\r\n]*/i);
+                  if (vttMatch) {
+                    s.url = vttMatch[0];
+                  }
+                }
+              } catch {
+              }
+              if (!s.url) {
+                s.url = s.uri;
+              }
+            }
+            for (let i = 5; i < parsedSubs.length; i++) {
+              parsedSubs[i].url = parsedSubs[i].uri;
+            }
+            subtitles = parsedSubs.map((s) => ({
+              url: s.url,
+              label: s.name,
+              name: s.name,
+              lang: s.lang,
+              default: !!s.default
+            }));
+          }
+        }
+      } catch (subErr) {
+        console.warn("Could not extract VixCloud subtitles:", subErr);
+      }
       return [
         new StreamResult({
           url: finalUrl,
@@ -123,7 +209,8 @@ var PluginModule = (() => {
           headers: {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
             "Referer": cleanEmbedUrl
-          }
+          },
+          subtitles: subtitles.length > 0 ? subtitles : void 0
         })
       ];
     } catch (err) {

@@ -153,6 +153,14 @@ export interface IEpisode {
   streams?: IStreamResult[];
 }
 
+export interface IStreamSubtitle {
+  url: string;
+  label: string;
+  name?: string;
+  lang?: string;
+  default?: boolean;
+}
+
 /**
  * Standard Stream Result
  */
@@ -160,7 +168,7 @@ export interface IStreamResult {
   url: string;
   source?: string;
   headers?: Record<string, string>;
-  subtitles?: { url: string; label: string; lang: string }[];
+  subtitles?: IStreamSubtitle[];
   drmKid?: string;
   drmKey?: string;
   licenseUrl?: string;
@@ -266,7 +274,7 @@ declare global {
     url: string;
     source?: string;
     headers?: Record<string, string>;
-    subtitles?: { url: string; label: string; lang: string }[];
+    subtitles?: IStreamSubtitle[];
     drmKid?: string;
     drmKey?: string;
     licenseUrl?: string;
