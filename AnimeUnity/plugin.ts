@@ -1,7 +1,7 @@
 /// <reference path="../src/types.d.ts" />
 import { get, post, parseJsonSafe } from '../src/utils/http';
 import { extractVixCloud } from '../src/extractors/vixcloud';
-import { fetchAniListIds, fetchTitleAliases } from '../src/utils/anilist';
+import { fetchAniListIds, fetchTitleAliases, ensureQueryInTitle } from '../src/utils/anilist';
 
 let cachedCsrfToken = '';
 let cachedCookies = '';
@@ -196,7 +196,7 @@ export async function search(query: string, cb: (res: Result<MultimediaItem[]>) 
       }
     }
 
-    cb({ success: true, data: items });
+    cb({ success: true, data: items.map((item: MultimediaItem) => ensureQueryInTitle(item, cleanQ)) });
   } catch (err: any) {
     cb({ success: false, errorCode: 'SEARCH_ERROR', message: err.message });
   }

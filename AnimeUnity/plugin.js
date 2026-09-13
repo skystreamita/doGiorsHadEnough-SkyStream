@@ -357,6 +357,17 @@ var PluginModule = (() => {
     }
     return [];
   }
+  function matchesAppQuery(title, query) {
+    const qParts = query.toLowerCase().split(/\s+/).filter((s) => s.length > 0);
+    const tParts = title.toLowerCase().split(/\s+/).filter((s) => s.length > 0);
+    return qParts.every((q) => tParts.some((t) => t.startsWith(q)));
+  }
+  function ensureQueryInTitle(item, query) {
+    if (!matchesAppQuery(item.title, query)) {
+      item.title = `${item.title} - ${query}`;
+    }
+    return item;
+  }
 
   // AnimeUnity/plugin.ts
   var cachedCsrfToken = "";
@@ -522,7 +533,7 @@ var PluginModule = (() => {
         } catch {
         }
       }
-      cb({ success: true, data: items });
+      cb({ success: true, data: items.map((item) => ensureQueryInTitle(item, cleanQ)) });
     } catch (err) {
       cb({ success: false, errorCode: "SEARCH_ERROR", message: err.message });
     }

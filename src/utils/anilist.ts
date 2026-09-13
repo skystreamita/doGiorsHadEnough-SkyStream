@@ -148,3 +148,16 @@ export async function fetchTitleAliases(query: string): Promise<string[]> {
 
   return [];
 }
+
+export function matchesAppQuery(title: string, query: string): boolean {
+  const qParts = query.toLowerCase().split(/\s+/).filter(s => s.length > 0);
+  const tParts = title.toLowerCase().split(/\s+/).filter(s => s.length > 0);
+  return qParts.every(q => tParts.some(t => t.startsWith(q)));
+}
+
+export function ensureQueryInTitle<T extends { title: string }>(item: T, query: string): T {
+  if (!matchesAppQuery(item.title, query)) {
+    item.title = `${item.title} - ${query}`;
+  }
+  return item;
+}

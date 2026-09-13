@@ -180,8 +180,22 @@ var PluginModule = (() => {
     }
     return [];
   }
+  function matchesAppQuery(title, query) {
+    const qParts = query.toLowerCase().split(/\s+/).filter((s) => s.length > 0);
+    const tParts = title.toLowerCase().split(/\s+/).filter((s) => s.length > 0);
+    return qParts.every((q) => tParts.some((t) => t.startsWith(q)));
+  }
+  function ensureQueryInTitle(item, query) {
+    if (!matchesAppQuery(item.title, query)) {
+      item.title = `${item.title} - ${query}`;
+    }
+    return item;
+  }
 
   // AnimeWorld/plugin.ts
+  function decodeHtml(str) {
+    return str.replace(/&#x27;/g, "'").replace(/&#39;/g, "'").replace(/&apos;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
+  }
   function parseHtmlItems(html) {
     const items = [];
     const itemMatches = html.matchAll(/<div class="item">([\s\S]*?)<\/div>\s*<\/div>/g);
@@ -194,7 +208,7 @@ var PluginModule = (() => {
       let posterUrl = posterMatch[2];
       if (posterUrl.startsWith("//")) posterUrl = "https:" + posterUrl;
       const fullUrl = relUrl.startsWith("http") ? relUrl : `${manifest.baseUrl}${relUrl.startsWith("/") ? "" : "/"}${relUrl}`;
-      const rawTitle = nameMatch[1].replace(/<[^>]+>/g, "").trim();
+      const rawTitle = decodeHtml(nameMatch[1].replace(/<[^>]+>/g, "").trim());
       const cleanTitle = rawTitle.replace(/\s*\(ITA\)\s*$/i, "");
       const isDub = block.includes('class="dub"') || rawTitle.includes("(ITA)");
       items.push(new MultimediaItem({
@@ -258,7 +272,7 @@ var PluginModule = (() => {
         } catch {
         }
       }
-      cb({ success: true, data: items });
+      cb({ success: true, data: items.map((item) => ensureQueryInTitle(item, cleanQ)) });
     } catch (err) {
       cb({ success: false, errorCode: "SEARCH_ERROR", message: err.message });
     }
@@ -272,7 +286,7 @@ var PluginModule = (() => {
       const res = await get(targetUrl);
       const html = res.body;
       const titleMatch = html.match(/<h1[^>]*class="[^"]*title[^"]*"[^>]*>([\s\S]*?)<\/h1>/i) || html.match(/<div class="info">[\s\S]*?<div class="title"[^>]*>([\s\S]*?)<\/div>/i);
-      const cleanTitle = titleMatch ? titleMatch[1].replace(/<[^>]+>/g, "").replace(/\s*\(ITA\)\s*$/i, "").trim() : "Anime";
+      const cleanTitle = titleMatch ? decodeHtml(titleMatch[1].replace(/<[^>]+>/g, "")).replace(/\s*\(ITA\)\s*$/i, "").trim() : "Anime";
       const posterMatch = html.match(/class="thumb">[\s\S]*?<img[^>]+(?:src|data-src)="([^"]+)"/i) || html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) || html.match(/<img[^>]+src=["'](https?:\/\/img\.animeworld\.[^"']+)["']/i);
       let posterUrl = posterMatch ? posterMatch[1] : "";
       if (posterUrl.startsWith("//")) posterUrl = "https:" + posterUrl;

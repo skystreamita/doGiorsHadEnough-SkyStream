@@ -1,6 +1,17 @@
 /// <reference path="../src/types.d.ts" />
 import { get } from '../src/utils/http';
-import { fetchAniListIds, fetchTitleAliases } from '../src/utils/anilist';
+import { fetchAniListIds, fetchTitleAliases, ensureQueryInTitle } from '../src/utils/anilist';
+
+function decodeHtml(str: string): string {
+  return str
+    .replace(/&#x27;/g, "'")
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>');
+}
 
 function parseHtmlItems(html: string): MultimediaItem[] {
   const items: MultimediaItem[] = [];
@@ -20,7 +31,7 @@ function parseHtmlItems(html: string): MultimediaItem[] {
     if (posterUrl.startsWith('//')) posterUrl = 'https:' + posterUrl;
 
     const fullUrl = relUrl.startsWith('http') ? relUrl : `${manifest.baseUrl}${relUrl.startsWith('/') ? '' : '/'}${relUrl}`;
-    const rawTitle = nameMatch[1].replace(/<[^>]+>/g, '').trim();
+    const rawTitle = decodeHtml(nameMatch[1].replace(/<[^>]+>/g, '').trim());
     const cleanTitle = rawTitle.replace(/\s*\(ITA\)\s*$/i, '');
 
     const isDub = block.includes('class="dub"') || rawTitle.includes('(ITA)');
@@ -99,7 +110,7 @@ export async function search(query: string, cb: (res: Result<MultimediaItem[]>) 
       }
     }
 
-    cb({ success: true, data: items });
+    cb({ success: true, data: items.map(item => ensureQueryInTitle(item, cleanQ)) });
   } catch (err: any) {
     cb({ success: false, errorCode: 'SEARCH_ERROR', message: err.message });
   }
@@ -117,7 +128,7 @@ export async function load(url: string, cb: (res: Result<MultimediaItem>) => voi
 
     const titleMatch = html.match(/<h1[^>]*class="[^"]*title[^"]*"[^>]*>([\s\S]*?)<\/h1>/i) ||
                        html.match(/<div class="info">[\s\S]*?<div class="title"[^>]*>([\s\S]*?)<\/div>/i);
-    const cleanTitle = titleMatch ? titleMatch[1].replace(/<[^>]+>/g, '').replace(/\s*\(ITA\)\s*$/i, '').trim() : 'Anime';
+    const cleanTitle = titleMatch ? decodeHtml(titleMatch[1].replace(/<[^>]+>/g, '')).replace(/\s*\(ITA\)\s*$/i, '').trim() : 'Anime';
 
     const posterMatch = html.match(/class="thumb">[\s\S]*?<img[^>]+(?:src|data-src)="([^"]+)"/i) ||
                         html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ||
