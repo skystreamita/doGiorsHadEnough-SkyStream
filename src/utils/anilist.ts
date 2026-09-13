@@ -19,9 +19,11 @@ export async function fetchAniListIds(title: string): Promise<AnimeSyncIds | nul
 
   const query = `
     query ($search: String) {
-      Media (search: $search, type: ANIME) {
-        id
-        idMal
+      Page (page: 1, perPage: 1) {
+        media (search: $search, type: ANIME, sort: [POPULARITY_DESC, SEARCH_MATCH]) {
+          id
+          idMal
+        }
       }
     }
   `;
@@ -39,7 +41,7 @@ export async function fetchAniListIds(title: string): Promise<AnimeSyncIds | nul
 
     if (res && res.body) {
       const data = parseJsonSafe(res.body);
-      const media = data?.data?.Media;
+      const media = data?.data?.Page?.media?.[0];
       if (media) {
         const sync: AnimeSyncIds = {};
         if (media.idMal) sync.mal = String(media.idMal);
@@ -54,17 +56,27 @@ export async function fetchAniListIds(title: string): Promise<AnimeSyncIds | nul
   return null;
 }
 
+function isAbbreviation(str: string): boolean {
+  const s = str.trim();
+  if (s.length <= 3) return true;
+  if (/^[A-Z0-9_-]{2,5}$/.test(s)) return true; // e.g. AOT, SNK, BNHA, OP, KNY
+  if (/^[A-Z][a-z]{1,2}[A-Z]/.test(s)) return true; // e.g. SnK, AoT, KnY
+  return false;
+}
+
 export async function fetchTitleAliases(query: string): Promise<string[]> {
   if (!query || query.trim().length < 2) return [];
 
   const gqlQuery = `
     query ($search: String) {
-      Media (search: $search, type: ANIME) {
-        title {
-          romaji
-          english
+      Page (page: 1, perPage: 1) {
+        media (search: $search, type: ANIME, sort: [POPULARITY_DESC, SEARCH_MATCH]) {
+          title {
+            romaji
+            english
+          }
+          synonyms
         }
-        synonyms
       }
     }
   `;
@@ -82,21 +94,52 @@ export async function fetchTitleAliases(query: string): Promise<string[]> {
 
     if (res && res.body) {
       const data = parseJsonSafe(res.body);
-      const media = data?.data?.Media;
+      const media = data?.data?.Page?.media?.[0];
       if (media) {
-        const candidates = new Set<string>();
-        if (media.title?.romaji) candidates.add(media.title.romaji);
-        if (media.title?.english) candidates.add(media.title.english);
+        const qLower = query.trim().toLowerCase();
+        const priorityList: string[] = [];
+        const secondaryList: string[] = [];
+
+        // 1. Romaji title (Predominant format on AnimeWorld & AnimeUnity)
+        if (media.title?.romaji && media.title.romaji.toLowerCase() !== qLower) {
+          priorityList.push(media.title.romaji);
+        }
+
+        // 2. English title
+        if (media.title?.english && media.title.english.toLowerCase() !== qLower) {
+          priorityList.push(media.title.english);
+        }
+
+        // 3. Synonyms
         if (Array.isArray(media.synonyms)) {
           for (const s of media.synonyms) {
-            // Keep only latin-character titles (Italian, English, Romaji, etc.)
-            if (/^[a-zA-Z0-9\s':.,!?'-]+$/.test(s) && s.length > 2) {
-              candidates.add(s);
+            const cleanS = s.trim();
+            if (cleanS.length < 3 || isAbbreviation(cleanS)) continue;
+            // Only Latin / European characters
+            if (!/^[a-zA-Z0-9\s':.,!?'-]+$/.test(cleanS)) continue;
+            if (cleanS.toLowerCase() === qLower) continue;
+
+            // Prioritize Italian synonyms
+            if (/\b(l'|d'|il |lo |la |i |gli |le |un |una |dei |degli |delle |del |della |di |l’)\b/i.test(cleanS)) {
+              priorityList.push(cleanS.replace(/’/g, "'"));
+            } else {
+              secondaryList.push(cleanS);
             }
           }
         }
-        const qLower = query.trim().toLowerCase();
-        return Array.from(candidates).filter(c => c.toLowerCase() !== qLower);
+
+        // Deduplicate while preserving priority order
+        const seen = new Set<string>();
+        const result: string[] = [];
+        for (const item of [...priorityList, ...secondaryList]) {
+          const low = item.toLowerCase();
+          if (!seen.has(low) && low !== qLower) {
+            seen.add(low);
+            result.push(item);
+          }
+        }
+
+        return result.slice(0, 4);
       }
     }
   } catch (err) {

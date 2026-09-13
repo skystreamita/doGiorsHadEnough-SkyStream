@@ -160,30 +160,36 @@ export async function search(query: string, cb: (res: Result<MultimediaItem[]>) 
         const aliases = await fetchTitleAliases(cleanQ);
         const seenUrls = new Set(items.map((i: MultimediaItem) => i.url));
 
-        for (const alias of aliases.slice(0, 3)) {
-          const aliasRes = await post(`${manifest.baseUrl}/archivio/get-animes`, {
-            title: alias,
-            type: false,
-            year: false,
-            order: false,
-            status: false,
-            genres: false,
-            season: false,
-            dubbed: 1,
-            offset: 0
-          }, { headers });
+        const aliasPromises = aliases.slice(0, 3).map(async (alias) => {
+          try {
+            const aliasRes = await post(`${manifest.baseUrl}/archivio/get-animes`, {
+              title: alias,
+              type: false,
+              year: false,
+              order: false,
+              status: false,
+              genres: false,
+              season: false,
+              dubbed: 1,
+              offset: 0
+            }, { headers });
 
-          const aliasJson = parseJsonSafe(aliasRes.body);
-          const aliasRecords = aliasJson?.records || [];
-          for (const rec of aliasRecords) {
-            const parsed = parseAnimeToMultimediaItem(rec);
+            const aliasJson = parseJsonSafe(aliasRes.body);
+            const aliasRecords = aliasJson?.records || [];
+            return aliasRecords.map(parseAnimeToMultimediaItem);
+          } catch {
+            return [];
+          }
+        });
+
+        const aliasResultLists = await Promise.all(aliasPromises);
+        for (const list of aliasResultLists) {
+          for (const parsed of list) {
             if (!seenUrls.has(parsed.url)) {
               seenUrls.add(parsed.url);
               items.push(parsed);
             }
           }
-
-          if (items.length >= 10) break;
         }
       } catch {
         // ignore

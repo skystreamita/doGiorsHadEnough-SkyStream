@@ -249,9 +249,11 @@ var PluginModule = (() => {
     const clean = title.replace(/\s*\(ITA\)\s*/gi, "").replace(/\s*\(SUB ITA\)\s*/gi, "").replace(/\s*\[ITA\]\s*/gi, "").replace(/\s*\[SUB ITA\]\s*/gi, "").replace(/\s*\(Doppiaggio Italiano\)\s*/gi, "").trim();
     const query = `
     query ($search: String) {
-      Media (search: $search, type: ANIME) {
-        id
-        idMal
+      Page (page: 1, perPage: 1) {
+        media (search: $search, type: ANIME, sort: [POPULARITY_DESC, SEARCH_MATCH]) {
+          id
+          idMal
+        }
       }
     }
   `;
@@ -267,7 +269,7 @@ var PluginModule = (() => {
       });
       if (res && res.body) {
         const data = parseJsonSafe(res.body);
-        const media = data?.data?.Media;
+        const media = data?.data?.Page?.media?.[0];
         if (media) {
           const sync = {};
           if (media.idMal) sync.mal = String(media.idMal);
@@ -280,16 +282,25 @@ var PluginModule = (() => {
     }
     return null;
   }
+  function isAbbreviation(str) {
+    const s = str.trim();
+    if (s.length <= 3) return true;
+    if (/^[A-Z0-9_-]{2,5}$/.test(s)) return true;
+    if (/^[A-Z][a-z]{1,2}[A-Z]/.test(s)) return true;
+    return false;
+  }
   async function fetchTitleAliases(query) {
     if (!query || query.trim().length < 2) return [];
     const gqlQuery = `
     query ($search: String) {
-      Media (search: $search, type: ANIME) {
-        title {
-          romaji
-          english
+      Page (page: 1, perPage: 1) {
+        media (search: $search, type: ANIME, sort: [POPULARITY_DESC, SEARCH_MATCH]) {
+          title {
+            romaji
+            english
+          }
+          synonyms
         }
-        synonyms
       }
     }
   `;
@@ -305,20 +316,40 @@ var PluginModule = (() => {
       });
       if (res && res.body) {
         const data = parseJsonSafe(res.body);
-        const media = data?.data?.Media;
+        const media = data?.data?.Page?.media?.[0];
         if (media) {
-          const candidates = /* @__PURE__ */ new Set();
-          if (media.title?.romaji) candidates.add(media.title.romaji);
-          if (media.title?.english) candidates.add(media.title.english);
+          const qLower = query.trim().toLowerCase();
+          const priorityList = [];
+          const secondaryList = [];
+          if (media.title?.romaji && media.title.romaji.toLowerCase() !== qLower) {
+            priorityList.push(media.title.romaji);
+          }
+          if (media.title?.english && media.title.english.toLowerCase() !== qLower) {
+            priorityList.push(media.title.english);
+          }
           if (Array.isArray(media.synonyms)) {
             for (const s of media.synonyms) {
-              if (/^[a-zA-Z0-9\s':.,!?'-]+$/.test(s) && s.length > 2) {
-                candidates.add(s);
+              const cleanS = s.trim();
+              if (cleanS.length < 3 || isAbbreviation(cleanS)) continue;
+              if (!/^[a-zA-Z0-9\s':.,!?'-]+$/.test(cleanS)) continue;
+              if (cleanS.toLowerCase() === qLower) continue;
+              if (/\b(l'|d'|il |lo |la |i |gli |le |un |una |dei |degli |delle |del |della |di |l’)\b/i.test(cleanS)) {
+                priorityList.push(cleanS.replace(/’/g, "'"));
+              } else {
+                secondaryList.push(cleanS);
               }
             }
           }
-          const qLower = query.trim().toLowerCase();
-          return Array.from(candidates).filter((c) => c.toLowerCase() !== qLower);
+          const seen = /* @__PURE__ */ new Set();
+          const result = [];
+          for (const item of [...priorityList, ...secondaryList]) {
+            const low = item.toLowerCase();
+            if (!seen.has(low) && low !== qLower) {
+              seen.add(low);
+              result.push(item);
+            }
+          }
+          return result.slice(0, 4);
         }
       }
     } catch (err) {
@@ -459,28 +490,34 @@ var PluginModule = (() => {
         try {
           const aliases = await fetchTitleAliases(cleanQ);
           const seenUrls = new Set(items.map((i) => i.url));
-          for (const alias of aliases.slice(0, 3)) {
-            const aliasRes = await post(`${manifest.baseUrl}/archivio/get-animes`, {
-              title: alias,
-              type: false,
-              year: false,
-              order: false,
-              status: false,
-              genres: false,
-              season: false,
-              dubbed: 1,
-              offset: 0
-            }, { headers });
-            const aliasJson = parseJsonSafe(aliasRes.body);
-            const aliasRecords = aliasJson?.records || [];
-            for (const rec of aliasRecords) {
-              const parsed = parseAnimeToMultimediaItem(rec);
+          const aliasPromises = aliases.slice(0, 3).map(async (alias) => {
+            try {
+              const aliasRes = await post(`${manifest.baseUrl}/archivio/get-animes`, {
+                title: alias,
+                type: false,
+                year: false,
+                order: false,
+                status: false,
+                genres: false,
+                season: false,
+                dubbed: 1,
+                offset: 0
+              }, { headers });
+              const aliasJson = parseJsonSafe(aliasRes.body);
+              const aliasRecords = aliasJson?.records || [];
+              return aliasRecords.map(parseAnimeToMultimediaItem);
+            } catch {
+              return [];
+            }
+          });
+          const aliasResultLists = await Promise.all(aliasPromises);
+          for (const list of aliasResultLists) {
+            for (const parsed of list) {
               if (!seenUrls.has(parsed.url)) {
                 seenUrls.add(parsed.url);
                 items.push(parsed);
               }
             }
-            if (items.length >= 10) break;
           }
         } catch {
         }

@@ -75,19 +75,24 @@ export async function search(query: string, cb: (res: Result<MultimediaItem[]>) 
         const aliases = await fetchTitleAliases(cleanQ);
         const seenUrls = new Set(items.map(i => i.url));
 
-        for (const alias of aliases.slice(0, 3)) {
-          const aliasUrl = `${manifest.baseUrl}/filter?sort=0&keyword=${encodeURIComponent(alias)}`;
-          const aliasRes = await get(aliasUrl);
-          const aliasItems = parseHtmlItems(aliasRes.body);
+        const aliasPromises = aliases.slice(0, 3).map(async (alias) => {
+          try {
+            const aliasUrl = `${manifest.baseUrl}/filter?sort=0&keyword=${encodeURIComponent(alias)}`;
+            const aliasRes = await get(aliasUrl);
+            return parseHtmlItems(aliasRes.body);
+          } catch {
+            return [];
+          }
+        });
 
-          for (const item of aliasItems) {
+        const aliasResultLists = await Promise.all(aliasPromises);
+        for (const list of aliasResultLists) {
+          for (const item of list) {
             if (!seenUrls.has(item.url)) {
               seenUrls.add(item.url);
               items.push(item);
             }
           }
-
-          if (items.length >= 10) break;
         }
       } catch {
         // ignore alias errors
