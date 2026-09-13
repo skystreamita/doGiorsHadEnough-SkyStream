@@ -6,6 +6,23 @@ export interface EpisodeMetadata {
   thumbnail?: string;
 }
 
+async function translateToItalian(text: string): Promise<string> {
+  if (!text || !text.trim()) return text;
+  if (/^[\d\s.:\-_#]+$/.test(text) || text.length < 3) return text;
+  try {
+    const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text.trim())}&langpair=en|it`;
+    const res = await get(url).catch(() => null);
+    if (res && res.body) {
+      const data = parseJsonSafe(res.body);
+      const translated = data?.responseData?.translatedText;
+      if (translated && typeof translated === 'string' && !translated.startsWith('MYMEMORY WARNING:')) {
+        return translated.trim();
+      }
+    }
+  } catch {}
+  return text;
+}
+
 export async function fetchAnimeEpisodeMetadata(opts: {
   malId?: string | number;
   anilistId?: string | number;
@@ -202,5 +219,23 @@ export async function fetchAnimeEpisodeMetadata(opts: {
   }
 
   await Promise.all(tasks);
+
+  // Translate episode titles and descriptions to Italian
+  const translationTasks: Promise<void>[] = [];
+  const entries = Array.from(epMap.entries()).slice(0, 50);
+  for (const [, meta] of entries) {
+    if (meta.title) {
+      translationTasks.push((async () => {
+        meta.title = await translateToItalian(meta.title!);
+      })());
+    }
+    if (meta.description) {
+      translationTasks.push((async () => {
+        meta.description = await translateToItalian(meta.description!);
+      })());
+    }
+  }
+  await Promise.all(translationTasks);
+
   return epMap;
 }

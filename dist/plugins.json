@@ -2,7 +2,7 @@
   {
     "packageName": "com.dogior.skystream.animeunity",
     "name": "AnimeUnity",
-    "version": 8,
+    "version": 9,
     "baseUrl": "https://www.animeunity.so",
     "description": "AnimeUnity - Anime in streaming sub ita e ita",
     "authors": [
@@ -34,7 +34,7 @@
   {
     "packageName": "com.dogior.skystream.animeworld",
     "name": "AnimeWorld",
-    "version": 8,
+    "version": 9,
     "baseUrl": "https://www.animeworld.ac",
     "description": "AnimeWorld - Anime in streaming sub ita e doppiati in italiano",
     "authors": [

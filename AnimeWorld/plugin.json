@@ -1,7 +1,7 @@
 {
   "packageName": "com.dogior.skystream.animeworld",
   "name": "AnimeWorld",
-  "version": 8,
+  "version": 9,
   "baseUrl": "https://www.animeworld.ac",
   "description": "AnimeWorld - Anime in streaming sub ita e doppiati in italiano",
   "authors": ["doGior", "SkyStream"],
