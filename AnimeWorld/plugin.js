@@ -192,6 +192,118 @@ var PluginModule = (() => {
     return item;
   }
 
+  // src/utils/anime_episodes.ts
+  async function fetchAnimeEpisodeMetadata(opts) {
+    const epMap = /* @__PURE__ */ new Map();
+    const setMeta = (num, meta) => {
+      if (!num || num < 1) return;
+      const existing = epMap.get(num) || {};
+      epMap.set(num, {
+        title: meta.title || existing.title,
+        description: meta.description || existing.description,
+        thumbnail: meta.thumbnail || existing.thumbnail
+      });
+    };
+    const tasks = [];
+    tasks.push((async () => {
+      try {
+        let kitsuId = null;
+        if (opts.malId) {
+          const mapUrl = `https://kitsu.io/api/edge/mappings?filter[externalSite]=myanimelist/anime&filter[externalId]=${opts.malId}&include=item`;
+          const mapRes = await get(mapUrl).catch(() => null);
+          if (mapRes && mapRes.body) {
+            const mapData = parseJsonSafe(mapRes.body);
+            kitsuId = mapData?.data?.[0]?.relationships?.item?.data?.id || null;
+          }
+        }
+        if (!kitsuId && opts.title) {
+          const cleanTitle = opts.title.replace(/\s*\(ITA\)\s*/gi, "").replace(/\s*\(SUB ITA\)\s*/gi, "").trim();
+          const searchUrl = `https://kitsu.io/api/edge/anime?filter[text]=${encodeURIComponent(cleanTitle)}&page[limit]=1`;
+          const searchRes = await get(searchUrl).catch(() => null);
+          if (searchRes && searchRes.body) {
+            const searchData = parseJsonSafe(searchRes.body);
+            kitsuId = searchData?.data?.[0]?.id || null;
+          }
+        }
+        if (!kitsuId) return;
+        const totalCount = opts.episodeCount || 26;
+        const pageOffsets = [];
+        for (let offset = 0; offset < totalCount && offset < 100; offset += 20) {
+          pageOffsets.push(offset);
+        }
+        const pageReqs = pageOffsets.map(async (offset) => {
+          try {
+            const epUrl = `https://kitsu.io/api/edge/episodes?filter[mediaId]=${kitsuId}&sort=number&page[limit]=20&page[offset]=${offset}`;
+            const epRes = await get(epUrl).catch(() => null);
+            if (epRes && epRes.body) {
+              const epData = parseJsonSafe(epRes.body);
+              const items = epData?.data || [];
+              for (const item of items) {
+                const num = item?.attributes?.number;
+                if (typeof num === "number") {
+                  const epTitle = item?.attributes?.canonicalTitle || item?.attributes?.titles?.en_us || item?.attributes?.titles?.en_jp;
+                  const epDesc = item?.attributes?.synopsis;
+                  const epThumb = item?.attributes?.thumbnail?.original;
+                  setMeta(num, {
+                    title: epTitle || void 0,
+                    description: epDesc || void 0,
+                    thumbnail: epThumb || void 0
+                  });
+                }
+              }
+            }
+          } catch {
+          }
+        });
+        await Promise.all(pageReqs);
+      } catch (err) {
+        console.warn("Kitsu episode fetch error:", err);
+      }
+    })());
+    if (opts.anilistId) {
+      tasks.push((async () => {
+        try {
+          const gqlQuery = `
+          query ($id: Int) {
+            Media (id: $id, type: ANIME) {
+              streamingEpisodes {
+                title
+                thumbnail
+              }
+            }
+          }
+        `;
+          const res = await post("https://graphql.anilist.co", {
+            query: gqlQuery,
+            variables: { id: parseInt(String(opts.anilistId), 10) }
+          }).catch(() => null);
+          if (res && res.body) {
+            const data = parseJsonSafe(res.body);
+            const streaming = data?.data?.Media?.streamingEpisodes || [];
+            for (const ep of streaming) {
+              if (!ep?.title) continue;
+              const match = ep.title.match(/^(?:Episode\s+(\d+)|\s*(\d+)\s*[.:\-])\s*(?:[-:]\s*)?(.*)$/i);
+              if (match) {
+                const num = parseInt(match[1] || match[2], 10);
+                const epTitle = (match[3] || "").trim();
+                if (num) {
+                  setMeta(num, {
+                    title: epTitle || void 0,
+                    thumbnail: ep.thumbnail || void 0
+                  });
+                }
+              }
+            }
+          }
+        } catch (err) {
+          console.warn("AniList episode fetch error:", err);
+        }
+      })());
+    }
+    await Promise.all(tasks);
+    return epMap;
+  }
+
   // AnimeWorld/plugin.ts
   function decodeHtml(str) {
     return str.replace(/&#x27;/g, "'").replace(/&#39;/g, "'").replace(/&apos;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
@@ -345,6 +457,24 @@ var PluginModule = (() => {
           if (extIds?.anilist) syncData.anilist = extIds.anilist;
         } catch {
         }
+      }
+      try {
+        const epMeta = await fetchAnimeEpisodeMetadata({
+          malId: syncData.mal,
+          anilistId: syncData.anilist,
+          title: cleanTitle,
+          episodeCount: episodes.length
+        });
+        for (const ep of episodes) {
+          const num = ep.episode || 1;
+          const meta = epMeta.get(num);
+          if (meta) {
+            if (meta.title) ep.name = `Episodio ${num}: ${meta.title}`;
+            if (meta.description) ep.description = meta.description;
+            if (meta.thumbnail) ep.posterUrl = meta.thumbnail;
+          }
+        }
+      } catch {
       }
       const item = new MultimediaItem({
         title: displayTitle,

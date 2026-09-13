@@ -1,6 +1,7 @@
 /// <reference path="../src/types.d.ts" />
 import { get } from '../src/utils/http';
 import { fetchAniListIds, fetchTitleAliases, ensureQueryInTitle } from '../src/utils/anilist';
+import { fetchAnimeEpisodeMetadata } from '../src/utils/anime_episodes';
 
 function decodeHtml(str: string): string {
   return str
@@ -205,6 +206,25 @@ export async function load(url: string, cb: (res: Result<MultimediaItem>) => voi
         if (extIds?.anilist) syncData.anilist = extIds.anilist;
       } catch {}
     }
+
+    // Enrich episodes with titles, descriptions and cover thumbnails
+    try {
+      const epMeta = await fetchAnimeEpisodeMetadata({
+        malId: syncData.mal,
+        anilistId: syncData.anilist,
+        title: cleanTitle,
+        episodeCount: episodes.length
+      });
+      for (const ep of episodes) {
+        const num = ep.episode || 1;
+        const meta = epMeta.get(num);
+        if (meta) {
+          if (meta.title) ep.name = `Episodio ${num}: ${meta.title}`;
+          if (meta.description) ep.description = meta.description;
+          if (meta.thumbnail) ep.posterUrl = meta.thumbnail;
+        }
+      }
+    } catch {}
 
     const item = new MultimediaItem({
       title: displayTitle,

@@ -2,6 +2,7 @@
 import { get, post, parseJsonSafe } from '../src/utils/http';
 import { extractVixCloud } from '../src/extractors/vixcloud';
 import { fetchAniListIds, fetchTitleAliases, ensureQueryInTitle } from '../src/utils/anilist';
+import { fetchAnimeEpisodeMetadata } from '../src/utils/anime_episodes';
 
 let cachedCsrfToken = '';
 let cachedCookies = '';
@@ -323,6 +324,25 @@ export async function load(url: string, cb: (res: Result<MultimediaItem>) => voi
         dubStatus: isDub ? 'dubbed' : 'subbed'
       }));
     }
+
+    // Enrich episodes with titles, descriptions and cover thumbnails
+    try {
+      const epMeta = await fetchAnimeEpisodeMetadata({
+        malId: syncData.mal,
+        anilistId: syncData.anilist,
+        title: cleanTitle,
+        episodeCount: episodes.length
+      });
+      for (const ep of episodes) {
+        const num = ep.episode || 1;
+        const meta = epMeta.get(num);
+        if (meta) {
+          if (meta.title) ep.name = `Episodio ${num}: ${meta.title}`;
+          if (meta.description) ep.description = meta.description;
+          if (meta.thumbnail) ep.posterUrl = meta.thumbnail;
+        }
+      }
+    } catch {}
 
     item.episodes = episodes;
     cb({ success: true, data: item });
