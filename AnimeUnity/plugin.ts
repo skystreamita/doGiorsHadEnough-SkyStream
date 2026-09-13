@@ -1,7 +1,7 @@
 /// <reference path="../src/types.d.ts" />
-import { get, post } from '../src/utils/http';
+import { get, post, parseJsonSafe } from '../src/utils/http';
 import { extractVixCloud } from '../src/extractors/vixcloud';
-import { fetchAniListIds } from '../src/utils/anilist';
+import { fetchAniListIds, fetchTitleAliases } from '../src/utils/anilist';
 
 let cachedCsrfToken = '';
 let cachedCookies = '';
@@ -130,9 +130,10 @@ export async function getHome(cb: (res: Result<Record<string, MultimediaItem[]>>
 
 export async function search(query: string, cb: (res: Result<MultimediaItem[]>) => void) {
   try {
+    const cleanQ = query.trim();
     const headers = await getCsrfHeaders();
     const res = await post(`${manifest.baseUrl}/archivio/get-animes`, {
-      title: query.trim(),
+      title: cleanQ,
       type: false,
       year: false,
       order: false,
@@ -151,7 +152,43 @@ export async function search(query: string, cb: (res: Result<MultimediaItem[]>) 
     }
 
     const records = json.records || [];
-    const items = records.map(parseAnimeToMultimediaItem);
+    let items = records.map(parseAnimeToMultimediaItem);
+
+    // If few or no results found, search using AniList title aliases (e.g. Romaji, English, Italian)
+    if (items.length < 3) {
+      try {
+        const aliases = await fetchTitleAliases(cleanQ);
+        const seenUrls = new Set(items.map((i: MultimediaItem) => i.url));
+
+        for (const alias of aliases.slice(0, 3)) {
+          const aliasRes = await post(`${manifest.baseUrl}/archivio/get-animes`, {
+            title: alias,
+            type: false,
+            year: false,
+            order: false,
+            status: false,
+            genres: false,
+            season: false,
+            dubbed: 1,
+            offset: 0
+          }, { headers });
+
+          const aliasJson = parseJsonSafe(aliasRes.body);
+          const aliasRecords = aliasJson?.records || [];
+          for (const rec of aliasRecords) {
+            const parsed = parseAnimeToMultimediaItem(rec);
+            if (!seenUrls.has(parsed.url)) {
+              seenUrls.add(parsed.url);
+              items.push(parsed);
+            }
+          }
+
+          if (items.length >= 10) break;
+        }
+      } catch {
+        // ignore
+      }
+    }
 
     cb({ success: true, data: items });
   } catch (err: any) {

@@ -103,6 +103,52 @@ var PluginModule = (() => {
     }
     return null;
   }
+  async function fetchTitleAliases(query) {
+    if (!query || query.trim().length < 2) return [];
+    const gqlQuery = `
+    query ($search: String) {
+      Media (search: $search, type: ANIME) {
+        title {
+          romaji
+          english
+        }
+        synonyms
+      }
+    }
+  `;
+    try {
+      const res = await post("https://graphql.anilist.co", {
+        query: gqlQuery,
+        variables: { search: query.trim() }
+      }, {
+        headers: {
+          "Accept": "application/json",
+          "Content-Type": "application/json"
+        }
+      });
+      if (res && res.body) {
+        const data = parseJsonSafe(res.body);
+        const media = data?.data?.Media;
+        if (media) {
+          const candidates = /* @__PURE__ */ new Set();
+          if (media.title?.romaji) candidates.add(media.title.romaji);
+          if (media.title?.english) candidates.add(media.title.english);
+          if (Array.isArray(media.synonyms)) {
+            for (const s of media.synonyms) {
+              if (/^[a-zA-Z0-9\s':.,!?'-]+$/.test(s) && s.length > 2) {
+                candidates.add(s);
+              }
+            }
+          }
+          const qLower = query.trim().toLowerCase();
+          return Array.from(candidates).filter((c) => c.toLowerCase() !== qLower);
+        }
+      }
+    } catch (err) {
+      console.warn(`Failed to fetch title aliases for "${query}":`, err);
+    }
+    return [];
+  }
 
   // AnimeWorld/plugin.ts
   function parseHtmlItems(html) {
@@ -152,9 +198,29 @@ var PluginModule = (() => {
   }
   async function search(query, cb) {
     try {
-      const searchUrl = `${manifest.baseUrl}/filter?sort=0&keyword=${encodeURIComponent(query.trim())}`;
+      const cleanQ = query.trim();
+      const searchUrl = `${manifest.baseUrl}/filter?sort=0&keyword=${encodeURIComponent(cleanQ)}`;
       const res = await get(searchUrl);
       const items = parseHtmlItems(res.body);
+      if (items.length < 3) {
+        try {
+          const aliases = await fetchTitleAliases(cleanQ);
+          const seenUrls = new Set(items.map((i) => i.url));
+          for (const alias of aliases.slice(0, 3)) {
+            const aliasUrl = `${manifest.baseUrl}/filter?sort=0&keyword=${encodeURIComponent(alias)}`;
+            const aliasRes = await get(aliasUrl);
+            const aliasItems = parseHtmlItems(aliasRes.body);
+            for (const item of aliasItems) {
+              if (!seenUrls.has(item.url)) {
+                seenUrls.add(item.url);
+                items.push(item);
+              }
+            }
+            if (items.length >= 10) break;
+          }
+        } catch {
+        }
+      }
       cb({ success: true, data: items });
     } catch (err) {
       cb({ success: false, errorCode: "SEARCH_ERROR", message: err.message });

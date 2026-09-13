@@ -280,6 +280,52 @@ var PluginModule = (() => {
     }
     return null;
   }
+  async function fetchTitleAliases(query) {
+    if (!query || query.trim().length < 2) return [];
+    const gqlQuery = `
+    query ($search: String) {
+      Media (search: $search, type: ANIME) {
+        title {
+          romaji
+          english
+        }
+        synonyms
+      }
+    }
+  `;
+    try {
+      const res = await post("https://graphql.anilist.co", {
+        query: gqlQuery,
+        variables: { search: query.trim() }
+      }, {
+        headers: {
+          "Accept": "application/json",
+          "Content-Type": "application/json"
+        }
+      });
+      if (res && res.body) {
+        const data = parseJsonSafe(res.body);
+        const media = data?.data?.Media;
+        if (media) {
+          const candidates = /* @__PURE__ */ new Set();
+          if (media.title?.romaji) candidates.add(media.title.romaji);
+          if (media.title?.english) candidates.add(media.title.english);
+          if (Array.isArray(media.synonyms)) {
+            for (const s of media.synonyms) {
+              if (/^[a-zA-Z0-9\s':.,!?'-]+$/.test(s) && s.length > 2) {
+                candidates.add(s);
+              }
+            }
+          }
+          const qLower = query.trim().toLowerCase();
+          return Array.from(candidates).filter((c) => c.toLowerCase() !== qLower);
+        }
+      }
+    } catch (err) {
+      console.warn(`Failed to fetch title aliases for "${query}":`, err);
+    }
+    return [];
+  }
 
   // AnimeUnity/plugin.ts
   var cachedCsrfToken = "";
@@ -388,9 +434,10 @@ var PluginModule = (() => {
   }
   async function search(query, cb) {
     try {
+      const cleanQ = query.trim();
       const headers = await getCsrfHeaders();
       const res = await post(`${manifest.baseUrl}/archivio/get-animes`, {
-        title: query.trim(),
+        title: cleanQ,
         type: false,
         year: false,
         order: false,
@@ -407,7 +454,37 @@ var PluginModule = (() => {
         return cb({ success: false, errorCode: "PARSE_ERROR", message: "Invalid search JSON" });
       }
       const records = json.records || [];
-      const items = records.map(parseAnimeToMultimediaItem);
+      let items = records.map(parseAnimeToMultimediaItem);
+      if (items.length < 3) {
+        try {
+          const aliases = await fetchTitleAliases(cleanQ);
+          const seenUrls = new Set(items.map((i) => i.url));
+          for (const alias of aliases.slice(0, 3)) {
+            const aliasRes = await post(`${manifest.baseUrl}/archivio/get-animes`, {
+              title: alias,
+              type: false,
+              year: false,
+              order: false,
+              status: false,
+              genres: false,
+              season: false,
+              dubbed: 1,
+              offset: 0
+            }, { headers });
+            const aliasJson = parseJsonSafe(aliasRes.body);
+            const aliasRecords = aliasJson?.records || [];
+            for (const rec of aliasRecords) {
+              const parsed = parseAnimeToMultimediaItem(rec);
+              if (!seenUrls.has(parsed.url)) {
+                seenUrls.add(parsed.url);
+                items.push(parsed);
+              }
+            }
+            if (items.length >= 10) break;
+          }
+        } catch {
+        }
+      }
       cb({ success: true, data: items });
     } catch (err) {
       cb({ success: false, errorCode: "SEARCH_ERROR", message: err.message });

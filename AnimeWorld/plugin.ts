@@ -1,6 +1,6 @@
 /// <reference path="../src/types.d.ts" />
 import { get } from '../src/utils/http';
-import { fetchAniListIds } from '../src/utils/anilist';
+import { fetchAniListIds, fetchTitleAliases } from '../src/utils/anilist';
 
 function parseHtmlItems(html: string): MultimediaItem[] {
   const items: MultimediaItem[] = [];
@@ -64,9 +64,35 @@ export async function getHome(cb: (res: Result<Record<string, MultimediaItem[]>>
 
 export async function search(query: string, cb: (res: Result<MultimediaItem[]>) => void) {
   try {
-    const searchUrl = `${manifest.baseUrl}/filter?sort=0&keyword=${encodeURIComponent(query.trim())}`;
+    const cleanQ = query.trim();
+    const searchUrl = `${manifest.baseUrl}/filter?sort=0&keyword=${encodeURIComponent(cleanQ)}`;
     const res = await get(searchUrl);
     const items = parseHtmlItems(res.body);
+
+    // If few or no results found, search using AniList title aliases (e.g. English, Romaji, Italian)
+    if (items.length < 3) {
+      try {
+        const aliases = await fetchTitleAliases(cleanQ);
+        const seenUrls = new Set(items.map(i => i.url));
+
+        for (const alias of aliases.slice(0, 3)) {
+          const aliasUrl = `${manifest.baseUrl}/filter?sort=0&keyword=${encodeURIComponent(alias)}`;
+          const aliasRes = await get(aliasUrl);
+          const aliasItems = parseHtmlItems(aliasRes.body);
+
+          for (const item of aliasItems) {
+            if (!seenUrls.has(item.url)) {
+              seenUrls.add(item.url);
+              items.push(item);
+            }
+          }
+
+          if (items.length >= 10) break;
+        }
+      } catch {
+        // ignore alias errors
+      }
+    }
 
     cb({ success: true, data: items });
   } catch (err: any) {
