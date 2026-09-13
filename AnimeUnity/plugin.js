@@ -58,6 +58,13 @@ var PluginModule = (() => {
       throw err;
     }
   }
+  function parseJsonSafe(str) {
+    try {
+      return JSON.parse(str);
+    } catch {
+      return null;
+    }
+  }
 
   // src/extractors/vixcloud.ts
   async function extractVixCloud(embedUrl, options) {
@@ -236,6 +243,44 @@ var PluginModule = (() => {
     }
   }
 
+  // src/utils/anilist.ts
+  async function fetchAniListIds(title) {
+    if (!title || !title.trim()) return null;
+    const clean = title.replace(/\s*\(ITA\)\s*/gi, "").replace(/\s*\(SUB ITA\)\s*/gi, "").replace(/\s*\[ITA\]\s*/gi, "").replace(/\s*\[SUB ITA\]\s*/gi, "").replace(/\s*\(Doppiaggio Italiano\)\s*/gi, "").trim();
+    const query = `
+    query ($search: String) {
+      Media (search: $search, type: ANIME) {
+        id
+        idMal
+      }
+    }
+  `;
+    try {
+      const res = await post("https://graphql.anilist.co", {
+        query,
+        variables: { search: clean }
+      }, {
+        headers: {
+          "Accept": "application/json",
+          "Content-Type": "application/json"
+        }
+      });
+      if (res && res.body) {
+        const data = parseJsonSafe(res.body);
+        const media = data?.data?.Media;
+        if (media) {
+          const sync = {};
+          if (media.idMal) sync.mal = String(media.idMal);
+          if (media.id) sync.anilist = String(media.id);
+          return Object.keys(sync).length > 0 ? sync : null;
+        }
+      }
+    } catch (err) {
+      console.warn(`Failed to fetch AniList IDs for "${title}":`, err);
+    }
+    return null;
+  }
+
   // AnimeUnity/plugin.ts
   var cachedCsrfToken = "";
   var cachedCookies = "";
@@ -402,6 +447,17 @@ var PluginModule = (() => {
       const descMatch = html.match(/class="[^"]*plot[^"]*"[^>]*>([\s\S]*?)<\/p>/i);
       const description = animeData?.plot || (descMatch ? descMatch[1].replace(/<[^>]+>/g, "").trim() : "");
       const score = animeData?.score ? parseFloat(animeData.score) : void 0;
+      const syncData = {};
+      if (animeData?.mal_id) syncData.mal = String(animeData.mal_id);
+      if (animeData?.anilist_id) syncData.anilist = String(animeData.anilist_id);
+      if (!syncData.mal && !syncData.anilist) {
+        try {
+          const extIds = await fetchAniListIds(cleanTitle);
+          if (extIds?.mal) syncData.mal = extIds.mal;
+          if (extIds?.anilist) syncData.anilist = extIds.anilist;
+        } catch {
+        }
+      }
       const item = new MultimediaItem({
         title: cleanTitle,
         url: targetUrl,
@@ -409,7 +465,8 @@ var PluginModule = (() => {
         type: "anime",
         description,
         score,
-        status: animeData?.status === "In corso" ? "ongoing" : "completed"
+        status: animeData?.status === "In corso" ? "ongoing" : "completed",
+        syncData: Object.keys(syncData).length > 0 ? syncData : void 0
       });
       const episodes = [];
       if (episodesList && Array.isArray(episodesList) && episodesList.length > 0) {

@@ -41,6 +41,68 @@ var PluginModule = (() => {
       throw err;
     }
   }
+  async function post(url, body, options) {
+    const isJson = typeof body === "object";
+    const postBody = isJson ? JSON.stringify(body) : body;
+    const headers = {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+      "Accept": "*/*",
+      ...isJson ? { "Content-Type": "application/json" } : {},
+      ...options?.headers || {}
+    };
+    try {
+      const res = await http_post(url, headers, postBody);
+      return res;
+    } catch (err) {
+      console.error(`HTTP POST error for ${url}:`, err);
+      throw err;
+    }
+  }
+  function parseJsonSafe(str) {
+    try {
+      return JSON.parse(str);
+    } catch {
+      return null;
+    }
+  }
+
+  // src/utils/anilist.ts
+  async function fetchAniListIds(title) {
+    if (!title || !title.trim()) return null;
+    const clean = title.replace(/\s*\(ITA\)\s*/gi, "").replace(/\s*\(SUB ITA\)\s*/gi, "").replace(/\s*\[ITA\]\s*/gi, "").replace(/\s*\[SUB ITA\]\s*/gi, "").replace(/\s*\(Doppiaggio Italiano\)\s*/gi, "").trim();
+    const query = `
+    query ($search: String) {
+      Media (search: $search, type: ANIME) {
+        id
+        idMal
+      }
+    }
+  `;
+    try {
+      const res = await post("https://graphql.anilist.co", {
+        query,
+        variables: { search: clean }
+      }, {
+        headers: {
+          "Accept": "application/json",
+          "Content-Type": "application/json"
+        }
+      });
+      if (res && res.body) {
+        const data = parseJsonSafe(res.body);
+        const media = data?.data?.Media;
+        if (media) {
+          const sync = {};
+          if (media.idMal) sync.mal = String(media.idMal);
+          if (media.id) sync.anilist = String(media.id);
+          return Object.keys(sync).length > 0 ? sync : null;
+        }
+      }
+    } catch (err) {
+      console.warn(`Failed to fetch AniList IDs for "${title}":`, err);
+    }
+    return null;
+  }
 
   // AnimeWorld/plugin.ts
   function parseHtmlItems(html) {
@@ -108,7 +170,7 @@ var PluginModule = (() => {
       const html = res.body;
       const titleMatch = html.match(/<h1[^>]*class="[^"]*title[^"]*"[^>]*>([\s\S]*?)<\/h1>/i) || html.match(/<div class="info">[\s\S]*?<div class="title"[^>]*>([\s\S]*?)<\/div>/i);
       const cleanTitle = titleMatch ? titleMatch[1].replace(/<[^>]+>/g, "").replace(/\s*\(ITA\)\s*$/i, "").trim() : "Anime";
-      const posterMatch = html.match(/class="thumb">[\s\S]*?<img[^>]+(?:src|data-src)="([^"]+)"/i);
+      const posterMatch = html.match(/class="thumb">[\s\S]*?<img[^>]+(?:src|data-src)="([^"]+)"/i) || html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) || html.match(/<img[^>]+src=["'](https?:\/\/img\.animeworld\.[^"']+)["']/i);
       let posterUrl = posterMatch ? posterMatch[1] : "";
       if (posterUrl.startsWith("//")) posterUrl = "https:" + posterUrl;
       const descMatch = html.match(/<div class="desc"[^>]*>([\s\S]*?)<\/div>/i);
@@ -135,6 +197,31 @@ var PluginModule = (() => {
         }));
       }
       episodes.sort((a, b) => (a.episode || 0) - (b.episode || 0));
+      const syncData = {};
+      const malMatch = html.match(/id=["']mal-button["'][^>]*href=["']([^"']+)["']/i) || html.match(/href=["'](https?:\/\/[^"']*myanimelist\.net\/anime\/(\d+)[^"']*)["']/i);
+      const anilistMatch = html.match(/id=["']anilist-button["'][^>]*href=["']([^"']+)["']/i) || html.match(/href=["'](https?:\/\/[^"']*anilist\.co\/anime\/(\d+)[^"']*)["']/i);
+      if (malMatch) {
+        const target = malMatch[2] || malMatch[1];
+        const parts = target.split("/").filter(Boolean);
+        const last = parts[parts.length - 1];
+        if (/^\d+$/.test(last)) syncData.mal = last;
+      }
+      if (anilistMatch) {
+        const target = anilistMatch[2] || anilistMatch[1];
+        const parts = target.split("/").filter(Boolean);
+        const last = parts[parts.length - 1];
+        if (/^\d+$/.test(last)) syncData.anilist = last;
+      }
+      if (!syncData.mal && !syncData.anilist) {
+        try {
+          const jtitleMatch = html.match(/data-jtitle="([^"]+)"/i);
+          const searchTitle = jtitleMatch ? jtitleMatch[1] : cleanTitle;
+          const extIds = await fetchAniListIds(searchTitle);
+          if (extIds?.mal) syncData.mal = extIds.mal;
+          if (extIds?.anilist) syncData.anilist = extIds.anilist;
+        } catch {
+        }
+      }
       const item = new MultimediaItem({
         title: cleanTitle,
         url: targetUrl,
@@ -143,7 +230,8 @@ var PluginModule = (() => {
         description,
         score,
         tags,
-        episodes
+        episodes,
+        syncData: Object.keys(syncData).length > 0 ? syncData : void 0
       });
       cb({ success: true, data: item });
     } catch (err) {

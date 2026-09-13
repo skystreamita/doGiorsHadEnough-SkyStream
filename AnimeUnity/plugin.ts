@@ -1,6 +1,7 @@
 /// <reference path="../src/types.d.ts" />
 import { get, post } from '../src/utils/http';
 import { extractVixCloud } from '../src/extractors/vixcloud';
+import { fetchAniListIds } from '../src/utils/anilist';
 
 let cachedCsrfToken = '';
 let cachedCookies = '';
@@ -206,6 +207,19 @@ export async function load(url: string, cb: (res: Result<MultimediaItem>) => voi
     const description = animeData?.plot || (descMatch ? descMatch[1].replace(/<[^>]+>/g, '').trim() : '');
 
     const score = animeData?.score ? parseFloat(animeData.score) : undefined;
+
+    const syncData: Record<string, string> = {};
+    if (animeData?.mal_id) syncData.mal = String(animeData.mal_id);
+    if (animeData?.anilist_id) syncData.anilist = String(animeData.anilist_id);
+
+    if (!syncData.mal && !syncData.anilist) {
+      try {
+        const extIds = await fetchAniListIds(cleanTitle);
+        if (extIds?.mal) syncData.mal = extIds.mal;
+        if (extIds?.anilist) syncData.anilist = extIds.anilist;
+      } catch {}
+    }
+
     const item = new MultimediaItem({
       title: cleanTitle,
       url: targetUrl,
@@ -213,7 +227,8 @@ export async function load(url: string, cb: (res: Result<MultimediaItem>) => voi
       type: 'anime',
       description,
       score,
-      status: animeData?.status === 'In corso' ? 'ongoing' : 'completed'
+      status: animeData?.status === 'In corso' ? 'ongoing' : 'completed',
+      syncData: Object.keys(syncData).length > 0 ? syncData : undefined
     });
 
     const episodes: Episode[] = [];
