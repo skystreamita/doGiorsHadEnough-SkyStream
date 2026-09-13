@@ -1,6 +1,7 @@
 /// <reference path="../src/types.d.ts" />
 import { get } from '../src/utils/http';
 import { extractVixCloud } from '../src/extractors/vixcloud';
+import { fetchMovieSeriesAliases, matchesAppQuery, ensureQueryInTitle } from '../src/utils/media_aliases';
 
 function extractInertiaPage(html: string): any {
   const match = html.match(/data-page="([\s\S]*?)"/) || html.match(/data-page='([\s\S]*?)'/);
@@ -97,7 +98,8 @@ export async function getHome(cb: (res: Result<Record<string, MultimediaItem[]>>
 
 export async function search(query: string, cb: (res: Result<MultimediaItem[]>) => void) {
   try {
-    const searchUrl = `${manifest.baseUrl}/it/search?q=${encodeURIComponent(query)}`;
+    const cleanQ = query.trim();
+    const searchUrl = `${manifest.baseUrl}/it/search?q=${encodeURIComponent(cleanQ)}`;
     const res = await get(searchUrl);
     const inertia = extractInertiaPage(res.body);
 
@@ -107,9 +109,45 @@ export async function search(query: string, cb: (res: Result<MultimediaItem[]>) 
 
     const cdnUrl = inertia.props.cdn_url || 'https://cdn.streamingunity.win';
     const titles = inertia.props.titles || [];
-    const items = titles.map((t: any) => parseTitleToMultimediaItem(t, cdnUrl));
+    const items: MultimediaItem[] = titles.map((t: any) => parseTitleToMultimediaItem(t, cdnUrl));
 
-    cb({ success: true, data: items });
+    // If few results found or none match the app query tokens directly, fetch aliases (e.g. English <-> Italian)
+    const hasDirectMatch = items.some(i => matchesAppQuery(i.title, cleanQ));
+    if (items.length < 3 || !hasDirectMatch) {
+      try {
+        const aliases = await fetchMovieSeriesAliases(cleanQ);
+        const seenUrls = new Set(items.map(i => i.url));
+
+        const aliasPromises = aliases.slice(0, 3).map(async (alias) => {
+          try {
+            const aliasUrl = `${manifest.baseUrl}/it/search?q=${encodeURIComponent(alias)}`;
+            const aRes = await get(aliasUrl);
+            const aInertia = extractInertiaPage(aRes.body);
+            if (aInertia?.props?.titles) {
+              const aCdn = aInertia.props.cdn_url || cdnUrl;
+              return aInertia.props.titles.map((t: any) => parseTitleToMultimediaItem(t, aCdn));
+            }
+            return [];
+          } catch {
+            return [];
+          }
+        });
+
+        const aliasLists = await Promise.all(aliasPromises);
+        for (const list of aliasLists) {
+          for (const item of list) {
+            if (!seenUrls.has(item.url)) {
+              seenUrls.add(item.url);
+              items.push(item);
+            }
+          }
+        }
+      } catch {
+        // ignore alias errors
+      }
+    }
+
+    cb({ success: true, data: items.map(item => ensureQueryInTitle(item, cleanQ)) });
   } catch (err: any) {
     cb({ success: false, errorCode: 'SEARCH_ERROR', message: err.message });
   }

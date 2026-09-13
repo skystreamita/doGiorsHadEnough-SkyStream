@@ -41,6 +41,13 @@ var PluginModule = (() => {
       throw err;
     }
   }
+  function parseJsonSafe(str) {
+    try {
+      return JSON.parse(str);
+    } catch {
+      return null;
+    }
+  }
 
   // src/extractors/vixcloud.ts
   async function extractVixCloud(embedUrl, options) {
@@ -219,6 +226,87 @@ var PluginModule = (() => {
     }
   }
 
+  // src/utils/media_aliases.ts
+  function matchesAppQuery(title, query) {
+    const qParts = query.toLowerCase().split(/\s+/).filter((s) => s.length > 0);
+    const tParts = title.toLowerCase().split(/\s+/).filter((s) => s.length > 0);
+    return qParts.every((q) => tParts.some((t) => t.startsWith(q)));
+  }
+  function ensureQueryInTitle(item, query) {
+    if (!matchesAppQuery(item.title, query)) {
+      item.title = `${item.title} - ${query}`;
+    }
+    return item;
+  }
+  async function fetchMovieSeriesAliases(query) {
+    const cleanQ = query.trim().toLowerCase();
+    if (cleanQ.length < 2) return [];
+    const aliases = /* @__PURE__ */ new Set();
+    const addAlias = (val) => {
+      if (!val) return;
+      const clean = val.replace(/\s*\([^)]*\)\s*$/, "").trim();
+      if (clean && clean.toLowerCase() !== cleanQ && clean.length >= 2) {
+        aliases.add(clean);
+      }
+    };
+    const tasks = [
+      // 1. Cinemeta (Stremio) - maps English & Italian titles for both movies and series
+      (async () => {
+        try {
+          const [mRes, sRes] = await Promise.all([
+            get(`https://v3-cinemeta.strem.io/catalog/movie/top/search=${encodeURIComponent(query)}.json`).catch(() => null),
+            get(`https://v3-cinemeta.strem.io/catalog/series/top/search=${encodeURIComponent(query)}.json`).catch(() => null)
+          ]);
+          if (mRes && mRes.body) {
+            const mData = parseJsonSafe(mRes.body);
+            if (mData?.metas?.[0]?.name) addAlias(mData.metas[0].name);
+          }
+          if (sRes && sRes.body) {
+            const sData = parseJsonSafe(sRes.body);
+            if (sData?.metas?.[0]?.name) addAlias(sData.metas[0].name);
+          }
+        } catch {
+        }
+      })(),
+      // 2. TVMaze (TV shows: original title & Italian AKAs)
+      (async () => {
+        try {
+          const r = await get(`https://api.tvmaze.com/singlesearch/shows?q=${encodeURIComponent(query)}&embed=akas`);
+          if (r && r.body) {
+            const d = parseJsonSafe(r.body);
+            if (d) {
+              addAlias(d.name);
+              const akas = d._embedded?.akas;
+              if (Array.isArray(akas)) {
+                for (const aka of akas) {
+                  if (aka.country?.code === "IT" || !aka.country) {
+                    addAlias(aka.name);
+                  }
+                }
+              }
+            }
+          }
+        } catch {
+        }
+      })(),
+      // 3. Italian Wikipedia (Finds Italian translation of English titles)
+      (async () => {
+        try {
+          const url = `https://it.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&format=json`;
+          const r = await get(url, { headers: { "User-Agent": "SkyStreamITA/1.0 (https://github.com/skystreamita)" } });
+          if (r && r.body) {
+            const data = parseJsonSafe(r.body);
+            const first = data?.query?.search?.[0]?.title;
+            if (first) addAlias(first);
+          }
+        } catch {
+        }
+      })()
+    ];
+    await Promise.all(tasks);
+    return Array.from(aliases).slice(0, 4);
+  }
+
   // StreamingCommunity/plugin.ts
   function extractInertiaPage(html) {
     const match = html.match(/data-page="([\s\S]*?)"/) || html.match(/data-page='([\s\S]*?)'/);
@@ -292,7 +380,8 @@ var PluginModule = (() => {
   }
   async function search(query, cb) {
     try {
-      const searchUrl = `${manifest.baseUrl}/it/search?q=${encodeURIComponent(query)}`;
+      const cleanQ = query.trim();
+      const searchUrl = `${manifest.baseUrl}/it/search?q=${encodeURIComponent(cleanQ)}`;
       const res = await get(searchUrl);
       const inertia = extractInertiaPage(res.body);
       if (!inertia || !inertia.props) {
@@ -301,7 +390,38 @@ var PluginModule = (() => {
       const cdnUrl = inertia.props.cdn_url || "https://cdn.streamingunity.win";
       const titles = inertia.props.titles || [];
       const items = titles.map((t) => parseTitleToMultimediaItem(t, cdnUrl));
-      cb({ success: true, data: items });
+      const hasDirectMatch = items.some((i) => matchesAppQuery(i.title, cleanQ));
+      if (items.length < 3 || !hasDirectMatch) {
+        try {
+          const aliases = await fetchMovieSeriesAliases(cleanQ);
+          const seenUrls = new Set(items.map((i) => i.url));
+          const aliasPromises = aliases.slice(0, 3).map(async (alias) => {
+            try {
+              const aliasUrl = `${manifest.baseUrl}/it/search?q=${encodeURIComponent(alias)}`;
+              const aRes = await get(aliasUrl);
+              const aInertia = extractInertiaPage(aRes.body);
+              if (aInertia?.props?.titles) {
+                const aCdn = aInertia.props.cdn_url || cdnUrl;
+                return aInertia.props.titles.map((t) => parseTitleToMultimediaItem(t, aCdn));
+              }
+              return [];
+            } catch {
+              return [];
+            }
+          });
+          const aliasLists = await Promise.all(aliasPromises);
+          for (const list of aliasLists) {
+            for (const item of list) {
+              if (!seenUrls.has(item.url)) {
+                seenUrls.add(item.url);
+                items.push(item);
+              }
+            }
+          }
+        } catch {
+        }
+      }
+      cb({ success: true, data: items.map((item) => ensureQueryInTitle(item, cleanQ)) });
     } catch (err) {
       cb({ success: false, errorCode: "SEARCH_ERROR", message: err.message });
     }
