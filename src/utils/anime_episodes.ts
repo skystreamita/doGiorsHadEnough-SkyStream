@@ -1,4 +1,4 @@
-﻿import { get, post, parseJsonSafe } from './http';
+import { get, post, parseJsonSafe } from './http';
 
 export interface EpisodeMetadata {
   title?: string;
@@ -6,9 +6,42 @@ export interface EpisodeMetadata {
   thumbnail?: string;
 }
 
+const GT_HEADERS = {
+  'User-Agent': 'GoogleTranslate/6.28.0.05.421483227 (Linux; U; Android 12; Pixel 6)',
+  'Accept': '*/*'
+};
+
 async function translateToItalian(text: string): Promise<string> {
   if (!text || !text.trim()) return text;
   if (/^[\d\s.:\-_#]+$/.test(text) || text.length < 3) return text;
+
+  // 1. Google Chrome Extension Translate (clients5) - fast, reliable, no captcha
+  try {
+    const url = `https://clients5.google.com/translate_a/t?client=dict-chrome-ex&sl=auto&tl=it&q=${encodeURIComponent(text.trim())}`;
+    const res = await get(url).catch(() => null);
+    if (res && res.body) {
+      const data = parseJsonSafe(res.body);
+      const translated = data?.[0]?.[0];
+      if (translated && typeof translated === 'string') {
+        return translated.trim();
+      }
+    }
+  } catch {}
+
+  // 2. Google Translate (client=gtx)
+  try {
+    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=it&dt=t&q=${encodeURIComponent(text.trim())}`;
+    const res = await get(url, { headers: GT_HEADERS }).catch(() => null);
+    if (res && res.body) {
+      const data = parseJsonSafe(res.body);
+      if (Array.isArray(data?.[0])) {
+        const translated = data[0].map((s: any) => s?.[0] || '').join('').trim();
+        if (translated) return translated;
+      }
+    }
+  } catch {}
+
+  // 3. MyMemory Translated fallback
   try {
     const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text.trim())}&langpair=en|it`;
     const res = await get(url).catch(() => null);
@@ -20,7 +53,75 @@ async function translateToItalian(text: string): Promise<string> {
       }
     }
   } catch {}
+
   return text;
+}
+
+async function translateTitlesBatch(titles: string[]): Promise<string[]> {
+  if (titles.length === 0) return [];
+
+  // 1. Google Chrome Extension Translate (clients5)
+  try {
+    const numbered = titles.map((t, i) => `${i + 1}. ${t}`).join('\n');
+    const url = `https://clients5.google.com/translate_a/t?client=dict-chrome-ex&sl=auto&tl=it&q=${encodeURIComponent(numbered)}`;
+    const res = await get(url).catch(() => null);
+    if (res && res.body) {
+      const data = parseJsonSafe(res.body);
+      const fullText = data?.[0]?.[0];
+      if (fullText && typeof fullText === 'string') {
+        const parsed: string[] = [];
+        for (let i = 0; i < titles.length; i++) {
+          const num = i + 1;
+          const nextNum = i + 2;
+          const regex = new RegExp(`(?:^|\\n)\\s*${num}\\.\\s*([\\s\\S]*?)(?=(?:\\n\\s*${nextNum}\\.|$))`, 'i');
+          const match = fullText.match(regex);
+          if (match && match[1].trim()) {
+            parsed.push(match[1].trim());
+          } else {
+            parsed.push(titles[i]);
+          }
+        }
+        if (parsed.length === titles.length) {
+          return parsed;
+        }
+      }
+    }
+  } catch {}
+
+  // 2. Google Translate (client=gtx)
+  try {
+    const numbered = titles.map((t, i) => `${i + 1}. ${t}`).join('\n');
+    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=it&dt=t&q=${encodeURIComponent(numbered)}`;
+    const res = await get(url, { headers: GT_HEADERS }).catch(() => null);
+    if (res && res.body) {
+      const data = parseJsonSafe(res.body);
+      if (Array.isArray(data?.[0])) {
+        const fullText = data[0].map((s: any) => s?.[0] || '').join('');
+        const parsed: string[] = [];
+        for (let i = 0; i < titles.length; i++) {
+          const num = i + 1;
+          const nextNum = i + 2;
+          const regex = new RegExp(`(?:^|\\n)\\s*${num}\\.\\s*([\\s\\S]*?)(?=(?:\\n\\s*${nextNum}\\.|$))`, 'i');
+          const match = fullText.match(regex);
+          if (match && match[1].trim()) {
+            parsed.push(match[1].trim());
+          } else {
+            parsed.push(titles[i]);
+          }
+        }
+        if (parsed.length === titles.length) {
+          return parsed;
+        }
+      }
+    }
+  } catch {}
+
+  // Fallback to sequential translation
+  const fallback: string[] = [];
+  for (const t of titles) {
+    fallback.push(await translateToItalian(t));
+  }
+  return fallback;
 }
 
 export async function fetchAnimeEpisodeMetadata(opts: {
@@ -221,21 +322,42 @@ export async function fetchAnimeEpisodeMetadata(opts: {
   await Promise.all(tasks);
 
   // Translate episode titles and descriptions to Italian
-  const translationTasks: Promise<void>[] = [];
   const entries = Array.from(epMap.entries()).slice(0, 50);
-  for (const [, meta] of entries) {
+
+  // 1. Batch translate titles in a single request (or minimal requests)
+  const titleList: { num: number; title: string }[] = [];
+  for (const [num, meta] of entries) {
     if (meta.title) {
-      translationTasks.push((async () => {
-        meta.title = await translateToItalian(meta.title!);
-      })());
-    }
-    if (meta.description) {
-      translationTasks.push((async () => {
-        meta.description = await translateToItalian(meta.description!);
-      })());
+      titleList.push({ num, title: meta.title });
     }
   }
-  await Promise.all(translationTasks);
+
+  if (titleList.length > 0) {
+    const rawTitles = titleList.map(t => t.title);
+    const translatedTitles = await translateTitlesBatch(rawTitles);
+    for (let i = 0; i < titleList.length; i++) {
+      const meta = epMap.get(titleList[i].num);
+      if (meta && translatedTitles[i]) {
+        meta.title = translatedTitles[i];
+      }
+    }
+  }
+
+  // 2. Translate descriptions sequentially to prevent rate limits
+  const descList: { num: number; desc: string }[] = [];
+  for (const [num, meta] of entries) {
+    if (meta.description) {
+      descList.push({ num, desc: meta.description });
+    }
+  }
+
+  for (const item of descList) {
+    const translated = await translateToItalian(item.desc);
+    const meta = epMap.get(item.num);
+    if (meta && translated) {
+      meta.description = translated;
+    }
+  }
 
   return epMap;
 }

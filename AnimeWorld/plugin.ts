@@ -224,7 +224,9 @@ export async function load(url: string, cb: (res: Result<MultimediaItem>) => voi
           if (meta.thumbnail) ep.posterUrl = meta.thumbnail;
         }
       }
-    } catch {}
+    } catch (err: any) {
+      console.error('fetchAnimeEpisodeMetadata error:', err?.message || err);
+    }
 
     const item = new MultimediaItem({
       title: displayTitle,

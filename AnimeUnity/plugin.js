@@ -370,9 +370,37 @@ var PluginModule = (() => {
   }
 
   // src/utils/anime_episodes.ts
+  var GT_HEADERS = {
+    "User-Agent": "GoogleTranslate/6.28.0.05.421483227 (Linux; U; Android 12; Pixel 6)",
+    "Accept": "*/*"
+  };
   async function translateToItalian(text) {
     if (!text || !text.trim()) return text;
     if (/^[\d\s.:\-_#]+$/.test(text) || text.length < 3) return text;
+    try {
+      const url = `https://clients5.google.com/translate_a/t?client=dict-chrome-ex&sl=auto&tl=it&q=${encodeURIComponent(text.trim())}`;
+      const res = await get(url).catch(() => null);
+      if (res && res.body) {
+        const data = parseJsonSafe(res.body);
+        const translated = data?.[0]?.[0];
+        if (translated && typeof translated === "string") {
+          return translated.trim();
+        }
+      }
+    } catch {
+    }
+    try {
+      const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=it&dt=t&q=${encodeURIComponent(text.trim())}`;
+      const res = await get(url, { headers: GT_HEADERS }).catch(() => null);
+      if (res && res.body) {
+        const data = parseJsonSafe(res.body);
+        if (Array.isArray(data?.[0])) {
+          const translated = data[0].map((s) => s?.[0] || "").join("").trim();
+          if (translated) return translated;
+        }
+      }
+    } catch {
+    }
     try {
       const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text.trim())}&langpair=en|it`;
       const res = await get(url).catch(() => null);
@@ -386,6 +414,68 @@ var PluginModule = (() => {
     } catch {
     }
     return text;
+  }
+  async function translateTitlesBatch(titles) {
+    if (titles.length === 0) return [];
+    try {
+      const numbered = titles.map((t, i) => `${i + 1}. ${t}`).join("\n");
+      const url = `https://clients5.google.com/translate_a/t?client=dict-chrome-ex&sl=auto&tl=it&q=${encodeURIComponent(numbered)}`;
+      const res = await get(url).catch(() => null);
+      if (res && res.body) {
+        const data = parseJsonSafe(res.body);
+        const fullText = data?.[0]?.[0];
+        if (fullText && typeof fullText === "string") {
+          const parsed = [];
+          for (let i = 0; i < titles.length; i++) {
+            const num = i + 1;
+            const nextNum = i + 2;
+            const regex = new RegExp(`(?:^|\\n)\\s*${num}\\.\\s*([\\s\\S]*?)(?=(?:\\n\\s*${nextNum}\\.|$))`, "i");
+            const match = fullText.match(regex);
+            if (match && match[1].trim()) {
+              parsed.push(match[1].trim());
+            } else {
+              parsed.push(titles[i]);
+            }
+          }
+          if (parsed.length === titles.length) {
+            return parsed;
+          }
+        }
+      }
+    } catch {
+    }
+    try {
+      const numbered = titles.map((t, i) => `${i + 1}. ${t}`).join("\n");
+      const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=it&dt=t&q=${encodeURIComponent(numbered)}`;
+      const res = await get(url, { headers: GT_HEADERS }).catch(() => null);
+      if (res && res.body) {
+        const data = parseJsonSafe(res.body);
+        if (Array.isArray(data?.[0])) {
+          const fullText = data[0].map((s) => s?.[0] || "").join("");
+          const parsed = [];
+          for (let i = 0; i < titles.length; i++) {
+            const num = i + 1;
+            const nextNum = i + 2;
+            const regex = new RegExp(`(?:^|\\n)\\s*${num}\\.\\s*([\\s\\S]*?)(?=(?:\\n\\s*${nextNum}\\.|$))`, "i");
+            const match = fullText.match(regex);
+            if (match && match[1].trim()) {
+              parsed.push(match[1].trim());
+            } else {
+              parsed.push(titles[i]);
+            }
+          }
+          if (parsed.length === titles.length) {
+            return parsed;
+          }
+        }
+      }
+    } catch {
+    }
+    const fallback = [];
+    for (const t of titles) {
+      fallback.push(await translateToItalian(t));
+    }
+    return fallback;
   }
   async function fetchAnimeEpisodeMetadata(opts) {
     const epMap = /* @__PURE__ */ new Map();
@@ -554,21 +644,36 @@ var PluginModule = (() => {
       })());
     }
     await Promise.all(tasks);
-    const translationTasks = [];
     const entries = Array.from(epMap.entries()).slice(0, 50);
-    for (const [, meta] of entries) {
+    const titleList = [];
+    for (const [num, meta] of entries) {
       if (meta.title) {
-        translationTasks.push((async () => {
-          meta.title = await translateToItalian(meta.title);
-        })());
-      }
-      if (meta.description) {
-        translationTasks.push((async () => {
-          meta.description = await translateToItalian(meta.description);
-        })());
+        titleList.push({ num, title: meta.title });
       }
     }
-    await Promise.all(translationTasks);
+    if (titleList.length > 0) {
+      const rawTitles = titleList.map((t) => t.title);
+      const translatedTitles = await translateTitlesBatch(rawTitles);
+      for (let i = 0; i < titleList.length; i++) {
+        const meta = epMap.get(titleList[i].num);
+        if (meta && translatedTitles[i]) {
+          meta.title = translatedTitles[i];
+        }
+      }
+    }
+    const descList = [];
+    for (const [num, meta] of entries) {
+      if (meta.description) {
+        descList.push({ num, desc: meta.description });
+      }
+    }
+    for (const item of descList) {
+      const translated = await translateToItalian(item.desc);
+      const meta = epMap.get(item.num);
+      if (meta && translated) {
+        meta.description = translated;
+      }
+    }
     return epMap;
   }
 
