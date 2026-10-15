@@ -69,7 +69,7 @@ export type MultimediaType = 'movie' | 'series' | 'anime' | 'livestream' | 'othe
 /**
  * Valid statuses for MultimediaItem
  */
-export type ShowStatus = 'completed' | 'ongoing' | 'upcoming';
+export type ShowStatus = 'completed' | 'ongoing' | 'upcoming' | 'unknown';
 
 
 /**
@@ -84,6 +84,7 @@ export interface IActor {
   name: string;
   image?: string;
   role?: string;
+  roleIsEnum?: boolean;
   voiceActor?: IActor;
 }
 
@@ -93,6 +94,8 @@ export interface IActor {
 export interface ITrailer {
   url: string;
   headers?: Record<string, string>;
+  raw?: boolean;
+  referer?: string;
 }
 
 /**
@@ -102,6 +105,12 @@ export interface INextAiring {
   episode: number;
   unixTime: number;
   season?: number;
+}
+
+export interface ISeasonName {
+  season: number;
+  name?: string;
+  displaySeason?: number;
 }
 
 /**
@@ -129,6 +138,8 @@ export interface IMultimediaItem {
   recommendations?: IMultimediaItem[];
   playbackPolicy?: string;
   isAdult?: boolean;
+  comingSoon?: boolean;
+  seasonNames?: ISeasonName[];
   nextAiring?: INextAiring;
   syncData?: Record<string, string>;
   streams?: IStreamResult[];
@@ -148,6 +159,7 @@ export interface IEpisode {
   rating?: number;
   runtime?: number;
   airDate?: string;
+  airedAt?: number;
   dubStatus?: DubStatus;
   playbackPolicy?: string;
   streams?: IStreamResult[];
@@ -245,6 +257,8 @@ declare global {
     recommendations?: MultimediaItem[];
     playbackPolicy?: string;
     isAdult?: boolean;
+    comingSoon?: boolean;
+    seasonNames?: ISeasonName[];
     nextAiring?: NextAiring;
     syncData?: Record<string, string>;
     streams?: StreamResult[];
@@ -263,6 +277,7 @@ declare global {
     rating?: number;
     runtime?: number;
     airDate?: string;
+    airedAt?: number;
     dubStatus?: DubStatus;
     playbackPolicy?: string;
     streams?: StreamResult[];

@@ -4,6 +4,10 @@ export interface EpisodeMetadata {
   title?: string;
   description?: string;
   thumbnail?: string;
+  rating?: number;
+  runtime?: number;
+  airDate?: string;
+  airedAt?: number;
 }
 
 const GT_HEADERS = {
@@ -138,7 +142,11 @@ export async function fetchAnimeEpisodeMetadata(opts: {
     epMap.set(num, {
       title: existing.title || meta.title,
       description: existing.description || meta.description,
-      thumbnail: existing.thumbnail || meta.thumbnail
+      thumbnail: existing.thumbnail || meta.thumbnail,
+      rating: existing.rating !== undefined ? existing.rating : meta.rating,
+      runtime: existing.runtime !== undefined ? existing.runtime : meta.runtime,
+      airDate: existing.airDate || meta.airDate,
+      airedAt: existing.airedAt !== undefined ? existing.airedAt : meta.airedAt
     });
   };
 
@@ -196,11 +204,16 @@ export async function fetchAnimeEpisodeMetadata(opts: {
                                 item?.attributes?.titles?.en_jp;
                 const epDesc = item?.attributes?.synopsis;
                 const epThumb = item?.attributes?.thumbnail?.original;
-                if (epTitle || epDesc || epThumb) {
+                const epAirDate = item?.attributes?.airdate;
+                const epLength = item?.attributes?.length;
+                if (epTitle || epDesc || epThumb || epAirDate || epLength) {
                   setMeta(num, {
                     title: epTitle || undefined,
                     description: epDesc || undefined,
-                    thumbnail: epThumb || undefined
+                    thumbnail: epThumb || undefined,
+                    runtime: typeof epLength === 'number' ? epLength : undefined,
+                    airDate: epAirDate || undefined,
+                    airedAt: epAirDate ? new Date(epAirDate).getTime() : undefined
                   });
                 }
               }
@@ -236,7 +249,9 @@ export async function fetchAnimeEpisodeMetadata(opts: {
                   setMeta(num, {
                     title: v.name || v.title,
                     description: v.overview || v.description,
-                    thumbnail: v.thumbnail
+                    thumbnail: v.thumbnail,
+                    airDate: v.released || undefined,
+                    airedAt: v.released ? new Date(v.released).getTime() : undefined
                   });
                 }
               }
@@ -265,7 +280,11 @@ export async function fetchAnimeEpisodeMetadata(opts: {
               setMeta(num, {
                 title: ep.name,
                 description: cleanDesc,
-                thumbnail: ep.image?.original || ep.image?.medium
+                thumbnail: ep.image?.original || ep.image?.medium,
+                rating: typeof ep.rating?.average === 'number' ? ep.rating.average : undefined,
+                runtime: typeof ep.runtime === 'number' ? ep.runtime : undefined,
+                airDate: ep.airdate || undefined,
+                airedAt: ep.airdate ? new Date(ep.airdate).getTime() : undefined
               });
             }
           }

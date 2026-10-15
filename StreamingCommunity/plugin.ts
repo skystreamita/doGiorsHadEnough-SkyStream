@@ -192,10 +192,24 @@ export async function load(url: string, cb: (res: Result<MultimediaItem>) => voi
         .map((tr: any) => new Trailer({ url: `https://www.youtube.com/watch?v=${tr.youtube_id}` }));
     }
 
+    if (title.status) {
+      const st = String(title.status).toLowerCase();
+      if (st.includes('ended') || st.includes('complet')) item.status = 'completed';
+      else if (st.includes('ongoing') || st.includes('corso')) item.status = 'ongoing';
+      else if (st.includes('soon') || st.includes('prossim')) item.status = 'upcoming';
+    }
+
     if (title.type === 'tv') {
       item.type = 'series';
       const episodes: Episode[] = [];
       const seasons = title.seasons || [];
+
+      if (seasons.length > 0) {
+        item.seasonNames = seasons.map((s: any) => ({
+          season: s.number,
+          name: s.name || `Stagione ${s.number}`
+        }));
+      }
 
       // Currently loaded season episodes
       const loadedSeason = inertia.props.loadedSeason;
@@ -233,7 +247,9 @@ export async function load(url: string, cb: (res: Result<MultimediaItem>) => voi
               episode: ep.number,
               description: ep.plot || '',
               posterUrl: getImageUrl(cdnUrl, epCover),
-              runtime: ep.duration ? parseInt(ep.duration, 10) : undefined
+              runtime: ep.duration ? parseInt(ep.duration, 10) : undefined,
+              airDate: ep.release_date || undefined,
+              airedAt: ep.release_date ? new Date(ep.release_date).getTime() : undefined
             }));
           }
         }
@@ -251,7 +267,10 @@ export async function load(url: string, cb: (res: Result<MultimediaItem>) => voi
           season: 1,
           episode: 1,
           description: item.description,
-          posterUrl: item.posterUrl
+          posterUrl: item.posterUrl,
+          runtime: item.duration,
+          airDate: title.release_date || undefined,
+          airedAt: title.release_date ? new Date(title.release_date).getTime() : undefined
         })
       ];
     }

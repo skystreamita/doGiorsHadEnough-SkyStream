@@ -308,7 +308,11 @@ var PluginModule = (() => {
       epMap.set(num, {
         title: existing.title || meta.title,
         description: existing.description || meta.description,
-        thumbnail: existing.thumbnail || meta.thumbnail
+        thumbnail: existing.thumbnail || meta.thumbnail,
+        rating: existing.rating !== void 0 ? existing.rating : meta.rating,
+        runtime: existing.runtime !== void 0 ? existing.runtime : meta.runtime,
+        airDate: existing.airDate || meta.airDate,
+        airedAt: existing.airedAt !== void 0 ? existing.airedAt : meta.airedAt
       });
     };
     const cleanTitle = (opts.title || "").replace(/\s*\(ITA\)\s*/gi, "").replace(/\s*\(SUB ITA\)\s*/gi, "").replace(/\s*\[ITA\]\s*/gi, "").replace(/\s*\[SUB ITA\]\s*/gi, "").trim();
@@ -351,11 +355,16 @@ var PluginModule = (() => {
                   const epTitle = item?.attributes?.canonicalTitle || item?.attributes?.titles?.en_us || item?.attributes?.titles?.en_jp;
                   const epDesc = item?.attributes?.synopsis;
                   const epThumb = item?.attributes?.thumbnail?.original;
-                  if (epTitle || epDesc || epThumb) {
+                  const epAirDate = item?.attributes?.airdate;
+                  const epLength = item?.attributes?.length;
+                  if (epTitle || epDesc || epThumb || epAirDate || epLength) {
                     setMeta(num, {
                       title: epTitle || void 0,
                       description: epDesc || void 0,
-                      thumbnail: epThumb || void 0
+                      thumbnail: epThumb || void 0,
+                      runtime: typeof epLength === "number" ? epLength : void 0,
+                      airDate: epAirDate || void 0,
+                      airedAt: epAirDate ? new Date(epAirDate).getTime() : void 0
                     });
                   }
                 }
@@ -389,7 +398,9 @@ var PluginModule = (() => {
                     setMeta(num, {
                       title: v.name || v.title,
                       description: v.overview || v.description,
-                      thumbnail: v.thumbnail
+                      thumbnail: v.thumbnail,
+                      airDate: v.released || void 0,
+                      airedAt: v.released ? new Date(v.released).getTime() : void 0
                     });
                   }
                 }
@@ -416,7 +427,11 @@ var PluginModule = (() => {
                 setMeta(num, {
                   title: ep.name,
                   description: cleanDesc,
-                  thumbnail: ep.image?.original || ep.image?.medium
+                  thumbnail: ep.image?.original || ep.image?.medium,
+                  rating: typeof ep.rating?.average === "number" ? ep.rating.average : void 0,
+                  runtime: typeof ep.runtime === "number" ? ep.runtime : void 0,
+                  airDate: ep.airdate || void 0,
+                  airedAt: ep.airdate ? new Date(ep.airdate).getTime() : void 0
                 });
               }
             }
@@ -668,6 +683,10 @@ var PluginModule = (() => {
             if (meta.title) ep.name = `Episodio ${num}: ${meta.title}`;
             if (meta.description) ep.description = meta.description;
             if (meta.thumbnail) ep.posterUrl = meta.thumbnail;
+            if (meta.rating !== void 0) ep.rating = meta.rating;
+            if (meta.runtime !== void 0) ep.runtime = meta.runtime;
+            if (meta.airDate) ep.airDate = meta.airDate;
+            if (meta.airedAt !== void 0) ep.airedAt = meta.airedAt;
           }
         }
       } catch (err) {

@@ -340,6 +340,10 @@ export async function load(url: string, cb: (res: Result<MultimediaItem>) => voi
           if (meta.title) ep.name = `Episodio ${num}: ${meta.title}`;
           if (meta.description) ep.description = meta.description;
           if (meta.thumbnail) ep.posterUrl = meta.thumbnail;
+          if (meta.rating !== undefined) ep.rating = meta.rating;
+          if (meta.runtime !== undefined) ep.runtime = meta.runtime;
+          if (meta.airDate) ep.airDate = meta.airDate;
+          if (meta.airedAt !== undefined) ep.airedAt = meta.airedAt;
         }
       }
     } catch {}
