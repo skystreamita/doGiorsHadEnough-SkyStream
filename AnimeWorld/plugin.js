@@ -387,6 +387,9 @@ var PluginModule = (() => {
             const sData = parseJsonSafe(sRes.body);
             const first = sData?.metas?.[0];
             if (first?.id) {
+              if (typeof first.id === "string" && first.id.startsWith("tt")) {
+                epMap.imdbId = first.id;
+              }
               const mUrl = `https://v3-cinemeta.strem.io/meta/series/${first.id}.json`;
               const mRes = await get(mUrl).catch(() => null);
               if (mRes && mRes.body) {
@@ -688,6 +691,9 @@ var PluginModule = (() => {
             if (meta.airDate) ep.airDate = meta.airDate;
             if (meta.airedAt !== void 0) ep.airedAt = meta.airedAt;
           }
+        }
+        if (!syncData.imdb && epMeta?.imdbId) {
+          syncData.imdb = epMeta.imdbId;
         }
       } catch (err) {
         console.error("fetchAnimeEpisodeMetadata error:", err?.message || err);

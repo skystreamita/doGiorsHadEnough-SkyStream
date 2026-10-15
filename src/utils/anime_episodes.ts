@@ -238,6 +238,9 @@ export async function fetchAnimeEpisodeMetadata(opts: {
           const sData = parseJsonSafe(sRes.body);
           const first = sData?.metas?.[0];
           if (first?.id) {
+            if (typeof first.id === 'string' && first.id.startsWith('tt')) {
+              (epMap as any).imdbId = first.id;
+            }
             const mUrl = `https://v3-cinemeta.strem.io/meta/series/${first.id}.json`;
             const mRes = await get(mUrl).catch(() => null);
             if (mRes && mRes.body) {

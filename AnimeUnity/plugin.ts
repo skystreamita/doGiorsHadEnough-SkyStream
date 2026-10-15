@@ -346,6 +346,10 @@ export async function load(url: string, cb: (res: Result<MultimediaItem>) => voi
           if (meta.airedAt !== undefined) ep.airedAt = meta.airedAt;
         }
       }
+      if (!syncData.imdb && (epMeta as any)?.imdbId) {
+        syncData.imdb = (epMeta as any).imdbId;
+        item.syncData = syncData;
+      }
     } catch {}
 
     item.episodes = episodes;

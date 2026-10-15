@@ -228,6 +228,9 @@ export async function load(url: string, cb: (res: Result<MultimediaItem>) => voi
           if (meta.airedAt !== undefined) ep.airedAt = meta.airedAt;
         }
       }
+      if (!syncData.imdb && (epMeta as any)?.imdbId) {
+        syncData.imdb = (epMeta as any).imdbId;
+      }
     } catch (err: any) {
       console.error('fetchAnimeEpisodeMetadata error:', err?.message || err);
     }

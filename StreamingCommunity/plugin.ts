@@ -199,6 +199,13 @@ export async function load(url: string, cb: (res: Result<MultimediaItem>) => voi
       else if (st.includes('soon') || st.includes('prossim')) item.status = 'upcoming';
     }
 
+    const syncData: Record<string, string> = {};
+    if (title.imdb_id) syncData.imdb = String(title.imdb_id);
+    if (title.tmdb_id) syncData.tmdb = String(title.tmdb_id);
+    if (Object.keys(syncData).length > 0) {
+      item.syncData = syncData;
+    }
+
     if (title.type === 'tv') {
       item.type = 'series';
       const episodes: Episode[] = [];
